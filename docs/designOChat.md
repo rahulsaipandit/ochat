@@ -1,142 +1,180 @@
-This is a fork of the Android implementation of bitchat, fully protocol-compatible with the [iOS version](https://github.com/permissionlesstech/bitchat) for cross-platform mesh communication.
+# ochat Design Notes: One Codebase for iOS and Android
 
-`ochat` (this workspace) is a personal fork of **permissionlesstech/bitchat-android**, the Kotlin/Jetpack Compose Android (and Wear OS) client — not a fork of `permissionlesstech/bitchat`, the Swift/SwiftUI iOS and macOS client. They are sibling implementations of the same wire protocol, built by the same org but with entirely different, unrelated codebases.
+Status: draft for discussion. Claims marked **(verify)** have not been checked against a primary source.
 
-## Relationship
-- **This repo (ochat)**: a fork of [permissionlesstech/bitchat-android](https://github.com/permissionlesstech/bitchat-android), written in **Kotlin** (Jetpack Compose/MVVM), targeting **Android** (and Wear OS).
-- **bitchat (iOS/macOS)**: a separate, independent repo from the same organization, written in **Swift** (SwiftUI/Xcode project).
-- They are **not forks of each other** — both implement the same bitchat wire protocol so they can talk to each other over Bluetooth mesh and Nostr, but the codebases are unrelated (different language, different architecture, different maintainers' decisions diverge over time).
+## 1. Context
 
-## Platform & stack differences
+`ochat` is a personal fork of [permissionlesstech/bitchat-android](https://github.com/permissionlesstech/bitchat-android), the Kotlin / Jetpack Compose Android (and Wear OS) client. It is **not** a fork of [permissionlesstech/bitchat](https://github.com/permissionlesstech/bitchat), the Swift / SwiftUI iOS and macOS client. The two are sibling implementations of the same wire protocol from the same organization, with unrelated codebases.
 
-| | This repo (ochat / bitchat-android) | bitchat (iOS/macOS) |
+| | ochat / bitchat-android | bitchat (iOS/macOS) |
 |---|---|---|
 | Language | Kotlin + some Java | Swift |
 | UI | Jetpack Compose (Material 3) | SwiftUI |
 | Platforms | Android, Wear OS | iOS, macOS |
-| Build | Gradle (`./gradlew assembleDebug`) | Xcode / `swift test` / `just` |
-| Architecture pattern | MVVM with `MeshForegroundService`, `UnifiedMeshService`, `MessageRouter`, etc. | MVVM-ish with Views/ViewModels/Services |
-| License | GPL-3.0 (per this repo's LICENSE.md) | Public domain |
+| Build | Gradle | Xcode / `swift test` |
+| License | GPL-3.0 (`LICENSE.md`) | Public domain |
 
-## Feature differences (per each README)
-- **Wi-Fi Aware transport**: this repo has a higher-bandwidth local mesh transport via Wi-Fi Aware on supported devices; the iOS/macOS client relies on Bluetooth LE mesh only.
-- **Tor support**: this repo has built-in Tor (Arti) for private internet connectivity (see `tools/arti-build/`).
-- **Channel passwords**: this repo supports password-protected channel chats (Argon2id + AES-256-GCM).
-- **Wear OS app**: this repo has a dedicated Wear OS build (`wear/`); iOS/macOS has no wearable equivalent.
-- Both share the core dual-transport design: BLE mesh (offline, max 7 hops, Noise Protocol encryption) + Nostr (geohash location channels, private envelopes as fallback), IRC-style commands, emergency wipe, and cross-platform protocol compatibility.
+Feature differences (per each README):
+- **Wi-Fi Aware transport:** higher-bandwidth local transport on supported Android devices. iOS/macOS relies on BLE only **(verify: iOS 26 added Wi-Fi Aware support)**.
+- **Tor (Arti):** built-in, for private internet connectivity (`tools/arti-build/`).
+- **Channel passwords:** Argon2id + AES-256-GCM.
+- **Wear OS:** dedicated build in `wear/`.
+- **Shared:** BLE mesh (offline, max 7 hops, Noise) + Nostr (geohash channels, private-message fallback), IRC-style commands, emergency wipe, cross-client protocol compatibility.
 
-## How it Works
-Off-grid messaging for internet shutdowns and jammed protests. Phones talk directly to each other over Bluetooth — no cell tower, no ISP, no server, no account.
+## 2. Goals and non-goals
 
-┌──────────────── shared TypeScript (~85%) ────────────────┐
-│  UI · SQLite · sealing · dedup · relay · expiry          │
-├──────────────────────────┬───────────────────────────────┤
-│  Swift (iOS)             │  Kotlin (Android)             │
-│  CoreBluetooth           │  BLE GATT                     │
-└──────────────────────────┴───────────────────────────────┘
-              BLE / Wi-Fi Direct — no tower, no ISP
+**Primary goal: one codebase for iOS and Android.** Every option below is judged first on whether it delivers a single codebase (logic and UI) that builds for both platforms. Anything that needs a second UI or a second implementation of the core is out of scope unless it is a thin platform shim (for example the CoreBluetooth transport).
 
-              he native layer is a dumb byte pipe: advertise, discover, connect, send bytes, receive bytes. It contains no chat logic, no storage, and no crypto, so there is exactly one implementation of the security-critical code to audit rather than three that drift apart.
+**Goals**
+- G1. One codebase (logic and UI) that builds for iOS and Android. This is the primary goal.
+- G2. Keep wire compatibility with existing bitchat clients (golden-vector tests).
+- G3. Keep security-critical code (Noise, channel crypto, protocol) in one implementation.
+- G4. Preserve offline BLE mesh behavior on both platforms.
 
-Routing is epidemic, not addressed. There are no routing tables, because a routing table is a map of who talks to whom. Every phone carries every unexpired envelope it has seen and offers it to every peer it meets; the recipient is simply whoever can decrypt it. This costs battery and bandwidth and buys the property that a captured phone reveals nothing about who was talking to whom.
+**Non-goals**
+- Replacing the existing Swift bitchat iOS client for its users.
+- Wear OS parity on iOS (the Wear client stays Android-only in every option).
+- Rewriting the protocol.
 
-It also means a phone is a courier. Someone who walks out of a jammed zone carries queued messages with them and delivers them on the other side.
+**Decisions**
+- **One codebase is the goal,** which is why a new iOS app is built rather than relying on the existing Swift client.
+- **Licensing: accept the constraint.** The repo stays GPL-3.0 and the iOS build inherits it. App Store distribution of GPL code is a known friction point; it is accepted, and distribution channels (for example TestFlight, sideloading or alternative marketplaces) are decided later.
+- **iOS background BLE will be prototyped** before extraction work starts (section 5, item 1).
 
-Four ways to send
-Who reads it	Use it for
-Everyone nearby	Anyone in range, including police running this app	Crowd warnings: "exit blocked at gate 4"
-Channel	Anyone with the passphrase	An affinity group that needs to grow by word of mouth
-Group	Only the people you added	Your actual crew
-Direct	One person	Everything sensitive
-Channels have no owner, no admin, no kick — a channel is a passphrase and nothing else. That is deliberate: BitChat's channel commands were validated only by the issuing client, so any member could seize a channel or strip its encryption. A construct with no privileged operations has none to forge. The cost is that a leaked passphrase ends the channel; start a new one.
+## 3. Options
 
-Groups are fan-out — one separately sealed copy per member, no shared group key, so there is no rekeying problem and no group cryptography to get wrong. Capped at 15 people because each message costs N transmissions over a radio Google documents as low-bandwidth.
+### A. KMP + Compose Multiplatform (CMP)
+Shared Kotlin core in `commonMain`, shared Compose UI, thin platform shells.
+- Reuses the existing, tested Kotlin protocol, Noise, mesh and Nostr code (after extraction, see risks).
+- One UI codebase on both platforms. Compose Multiplatform for iOS reached stable in 2025 **(verify current status)**.
+- iOS BLE (CoreBluetooth, both central and peripheral roles) is written in Swift against a Kotlin `Transport` interface defined in `commonMain`. Swift implements the exported Kotlin interface; no bridging header is involved.
+- Wear OS remains an Android module sharing the same core.
 
-Layout
-src/lib/
-  crypto-core.ts    sealing + channel keys — pure, no RN imports, fully tested
-  crypto.ts         keystore wrapper around crypto-core
-  protocol.ts       wire format, padding, expiry
-  db.ts             SQLite: messages, contacts, channels, groups, envelope cache
-  store.ts          MeshStore interface — lets the engine run against memory in tests
-  mesh.ts           the engine — sealing, dedup, store-and-forward, relay
-  transport.ts      radio abstraction (our BLE GATT today, LoRa/gateway later)
-  conversation.ts   derives the mode and its warning, in ONE place
-  app-state.tsx     React bindings
-src/app/            home, chat/[id], add, verify/[id], join-channel, new-group, settings
-modules/nearby-mesh/    the Swift + Kotlin native module
-scripts/doctor.sh       checks your build toolchain and names the fix for anything missing
-docs/THREAT-MODEL.md
+### B. Expo / React Native (Dev Client + Expo Modules API)
+Shared TypeScript for UI and logic, with custom Swift and Kotlin modules for BLE.
+- Expo Go cannot load custom native Bluetooth code, so a development build (`expo-dev-client`, Xcode / Android Studio or EAS) is required. This is expected, not a failure of Expo.
+- Existing RN BLE libraries are central-role only; a mesh also needs the peripheral/GATT-server role, so custom native code is required on both platforms.
+- Recent SDKs add experimental *inline modules* (Swift/Kotlin next to app files) and `expo-type-information` (generates TypeScript types from Swift modules). **(verify: SDK version, status, and that the cited changelog covers them; the SDK 58 beta changelog reviewed did not mention `expo-type-information`.)** They reduce glue-code friction only. They do not remove the need to rewrite the core, and they are experimental.
+- Noise sessions, Argon2id / AES-GCM channel crypto, and the binary protocol would be rewritten in TypeScript and re-verified byte-for-byte against both existing clients. The existing Kotlin code is discarded.
 
-mesh.ts takes its transport and store by injection, so the whole engine — relaying, dedup, hop limits, channels, fan-out — is exercised by npm test with no radio and no phone.
+### C. Flutter
+Not evaluated. It would also require a full rewrite (Dart) and custom BLE peripheral code. Listed so it is explicitly ruled out unless there is a reason to revisit.
 
-# Design Next Version
-I want to explore solutions that let me compile for iOS, Android. One option is the latest Expo SDK that supports native swift and kotlin code. The other option is KMP (Kotlin Multi Platform).
+### Comparison
 
-However we have to see if that will work because earlier **Expo Go failed to work** - it could NOT load custom native Bluetooth code and required a development build, which means Xcode and/or Android Studio.
-
-## Option comparison: Expo (custom native modules) vs. KMP
-
-Both options end up needing a custom native build either way — Expo Go was a dead end specifically because this app's core requirement (custom BLE GATT code) cannot run in Expo's prebuilt sandbox. That removes Expo Go's main selling point (no Xcode/Android Studio, no dev build) and leaves two "write native BLE, share the rest" architectures to choose between.
-
-Yes — the Expo Modules API (current SDK) does compile real native Swift and Kotlin, not an interpreted bridge, and it can wrap this repo's existing BLE/GATT code directly on Android. The nuance is *what* that native compilation buys you: it still only solves the JS-to-native call boundary, not cross-platform code reuse. The Kotlin code compiled via an Expo Module runs on Android only — reaching iOS still requires a from-scratch Swift reimplementation of anything you didn't keep in the shared TypeScript layer. That is the opposite of KMP, where Kotlin/Native lets the *same* `commonMain` Kotlin (not a port of it) compile for both targets. So the real decision isn't "can Expo compile native code" (it can) — it's "do you want the security-critical logic (`noise/`, `crypto/`, `protocol/`, `mesh/`) to live once in Kotlin and run on both platforms (KMP), or live once in TypeScript with thin per-platform native shims (Expo), or get reimplemented per-platform in both Swift and Kotlin native modules (Expo, if you push logic into the native layer instead of TS) — the last option recreates the exact two-implementation problem this doc is trying to avoid.
-
-| | Expo (Dev Client + Expo Modules API) | KMP (Kotlin Multiplatform) |
+| | A. KMP + CMP | B. Expo / RN |
 |---|---|---|
-| Shared logic language | TypeScript (new) | Kotlin (**already written** — this repo's `crypto/`, `mesh/`, `noise/`, `protocol/`, `nostr/`, `identity/` packages) |
-| Native BLE | New Swift module + new Kotlin module via Expo Modules API | Android: reuse existing `mesh/` BLE GATT code. iOS: new Swift, called from Kotlin/Native via `expect`/`actual` |
-| Build requirement | `expo-dev-client` + EAS Build (or local Xcode/Gradle) — Expo Go cannot load it | Xcode (iOS app shell) + Gradle (Android app shell + shared module) |
-| UI | One shared UI (React Native) across iOS/Android | Native UI per platform (Compose on Android, SwiftUI on iOS), or Compose Multiplatform (iOS target still beta) |
-| Crypto/protocol risk | Full rewrite of Noise sessions, Argon2id/AES-GCM channel crypto, and the binary wire protocol in TypeScript — new, unaudited implementation of security-critical code | Existing, already-tested Kotlin crypto/protocol code moves into a shared module largely unchanged |
-| Cross-platform wire compatibility | Must re-derive byte-for-byte compatibility with the iOS Swift client and this Android client from scratch | Shared module can be unit-tested directly against this repo's existing protocol/golden-vector tests |
+| One codebase (G1) | Yes (logic + UI) | Yes (logic + UI) |
+| Reuses existing Kotlin core | Yes, after extraction | No, full rewrite |
+| Wire compatibility (G2) | Existing golden vectors run against the shared module | Re-derive and re-test in TypeScript |
+| One security-critical implementation (G3) | Yes | Yes, but a new, unaudited one |
+| Native BLE | Swift (iOS) + existing Kotlin (Android) | New Swift + new Kotlin modules |
+| Maturity risk | CMP iOS, Kotlin/Native binary size and interop | Experimental inline modules, rewrite risk |
+| Wear OS | Shares core | Separate Kotlin project |
 
-## Recommendation
+## 4. Recommendation
 
-**KMP**, not Expo, for this project specifically — because the "shared core" already exists in Kotlin. Rewriting `noise/`, `crypto/`, `protocol/`, and `mesh/` in TypeScript to fit Expo would mean re-implementing and re-auditing security-critical code in a second language, which directly fights the "one implementation of the security-critical code to audit" principle in [How it Works](#how-it-works). Expo would make sense if this project were starting from a TypeScript codebase; it is not — it is starting from a mature Kotlin one.
+**Option A: KMP + Compose Multiplatform**, conditional on the gating checks in section 6.
 
-Proposed shape:
-- Extract `crypto/`, `noise/`, `protocol/`, `mesh/` (routing, dedup, TTL, fragmentation), `identity/`, and `nostr/` from `app/` into a new `:shared` KMP module (`commonMain`), keeping Android's existing BLE transport as the `androidMain` `actual` implementation.
-- Add an `iosMain` `actual` BLE transport backed by a small CoreBluetooth Swift layer (the "dumb byte pipe" from How it Works), exposed to Kotlin/Native through a Swift/Objective-C bridging header or Kotlin/Native cinterop.
-- Keep per-platform UI native (Jetpack Compose on Android/Wear OS, SwiftUI on iOS) rather than adopting Compose Multiplatform for iOS immediately, since that target is still less mature than Android/Desktop.
-- Validate with the existing protocol/golden-vector and Mesh Lab tests against both the Android app and a new thin iOS shell before trusting cross-platform interop.
+Reasons:
+1. It meets G1 without discarding a mature, tested core. Option B meets G1 by rewriting the security-critical code, which is the highest-risk part of the project.
+2. "Tested" is not "audited". Neither option has an audit; A at least keeps the existing test and golden-vector coverage.
+3. The Expo inline-module and type-generation features address the thin native shim, which is the smallest part of the work.
+4. The earlier idea of native SwiftUI on iOS is dropped, because it would be a second UI codebase and violate G1.
 
-## Open risks to validate before committing
+Reconsider Option B only if the team is TypeScript-first and willing to fund a crypto rewrite plus an independent review.
 
-- Kotlin/Native interop overhead and binary size impact on the iOS app.
-- Whether `kotlinx.coroutines`/`Flow` usage in `mesh/` and `service/` ports cleanly to `iosMain`, or needs an abstraction layer.
-- Foreground-service-equivalent background BLE behavior on iOS (background modes are far more restrictive than Android's foreground service) — this changes duty-cycling and reconnection logic, not just the transport.
+### Proposed shape
+- New `:shared` KMP module with `commonMain` containing `protocol/`, `noise/`, `crypto/`, `mesh/` logic (routing, dedup, TTL, fragmentation), `identity/`, `nostr/`.
+- `commonMain` defines `Transport` (and storage / secure-key interfaces). `androidMain` keeps the existing BLE GATT and Wi-Fi Aware transports. `iosMain` / Swift supplies a CoreBluetooth implementation.
+- Shared Compose Multiplatform UI. Android and Wear OS shells stay in Gradle; a thin iOS shell hosts the CMP view controller.
+- Validate with the existing protocol / golden-vector tests and Mesh Lab on both an Android and an iOS device before trusting interop.
 
-# Why we do not use Google Nearby Connections
-The obvious choice for cross-platform device-to-device is Google's Nearby Connections. We built on it first and then removed it, for two independent reasons:
+## 5. Risks and gating checks
 
-On iOS it only ever brings up the Wi-Fi LAN medium — both phones must already be joined to the same Wi-Fi network. In a jammed square with no infrastructure that is not a degraded path, it is no path at all. Google lists iOS BLE as "in development."
-It ships for iOS via Swift Package Manager only, with no CocoaPods support — an open request since May 2023, filed precisely because React Native and Flutter plugin systems depend on CocoaPods.
-So even solving the packaging would have produced an iPhone that cannot reach an Android phone at a protest. We now own the radio outright in modules/ble-mesh/: CoreBluetooth on iOS, BLE GATT on Android, no third-party dependency on either side.
+Do these before committing to extraction work.
 
-The migration is an upgrade rather than a workaround. Nearby gave us no control over the advertising identifier, and a stable BLE identifier is a tracking beacon — open problem #2 in the threat model. Owning the advertisement is the only way to rotate it, which we now do every 15 minutes from fresh CSPRNG bytes, with no name or key material advertised at all.
+1. **iOS background BLE (gating, will be prototyped).** Backgrounded iOS apps have restricted advertising and scanning, and background mesh relaying is hard. The protestchat project documents the same unresolved problem. Prototype a CoreBluetooth central + peripheral that survives backgrounding and interoperates with an Android device. Exit criteria: discovery, connection and a message round trip with the iOS app foregrounded, backgrounded and screen-locked, plus measured battery cost. Record what degraded behavior is acceptable.
+   **Does KMP + Compose Multiplatform limit iOS Bluetooth access? No.** The limits come from iOS, not from the language, and a Swift-only app has the same ones.
+   - The app is still a native iOS app: an Xcode project with a Swift entry point (`AppDelegate`, `Info.plist`). Compose Multiplatform only renders UI inside it. Background modes (`UIBackgroundModes`), entitlements and permission strings are configured in that shell exactly as in a Swift app.
+   - Kotlin/Native ships bindings for Apple frameworks, so `CBCentralManager`, `CBPeripheralManager` and their delegates can be called from Kotlin, and Kotlin code runs when iOS wakes the app in the background.
+   - Swift remains an option: the shared `Transport` interface lets the iOS BLE layer be written in Swift with everything else in Kotlin.
 
-## Could Nearby Connections work as a fallback instead of a primary transport?
+   Real friction to expect:
+   - State restoration must be set up at launch (restore identifier, `willRestoreState`); this belongs in the thin Swift shell.
+   - Delegate protocols, Objective-C nullability and dispatch-queue threading are more awkward from Kotlin than from Swift.
+   - Debugging Kotlin/Native in Xcode is weaker than debugging Swift.
+   - iOS rules that bind every implementation, notably restricted background advertising and scanning.
 
-No, for the same two reasons, not just one of them:
+   Plan to de-risk:
+   1. Write the iOS BLE transport in Swift behind the `Transport` interface. Evaluate reusing code from the existing bitchat iOS client (public domain); check how separable it is before relying on it.
+   2. Run the background-BLE prototype in Swift first, to isolate the OS question from the Kotlin question.
+   3. Move it into Kotlin later only if there is a reason.
+2. **Licensing (decided: accept).** This repo is GPL-3.0 and the iOS build inherits it. Residual risk is App Store distribution; track it but it no longer blocks the design.
+3. **Extraction cost.** The shared packages use JVM and Android APIs (JCA / BouncyCastle-style crypto, OkHttp networking, JNI for Arti, Android types in `mesh/`). Moving to `commonMain` means swapping crypto and networking libraries (the security-critical part) and separating BLE from routing logic. This is a refactor, not a move. Estimate it before committing.
+4. **Tor on iOS.** Arti is currently built for Android. An iOS build is separate work, or Tor is Android-only at first.
+5. **Coroutines / Flow in `iosMain`.** Confirm `mesh/` and `service/` code ports cleanly, or add an abstraction layer.
+6. **CMP iOS maturity and binary size.** Verify current stability and measure app size.
+7. **Wi-Fi Aware on iOS** could enable a cross-platform high-bandwidth transport; see the spike in section 7.
+8. **Rust core via UniFFI** is a common alternative for sharing crypto and protocol across platforms. It is not evaluated here; note it if option A's extraction cost proves too high.
 
-- **It doesn't help the target scenario.** The whole point of a fallback is to cover the case our primary transport (BLE mesh) can't — a jammed square with no infrastructure. On iOS, Nearby's only real medium there is Wi-Fi LAN, which *requires* an existing Wi-Fi network. If a shared Wi-Fi network existed, that same network already gives both phones a route to each other without Nearby; if it doesn't exist (the actual protest/shutdown case), Nearby degrades to BLE "in development" on iOS — i.e. it contributes nothing in exactly the moment a fallback is supposed to matter.
-- **The tracking-identifier problem isn't a primary-transport-only risk.** Any time Nearby is active — even as a rarely-used fallback — it advertises a device identifier we don't control and can't rotate. A fallback that is "usually off" still opens that window whenever it turns on, which reintroduces open threat-model problem #2 instead of closing it.
+## 6. Comparison: ochat vs protestchat
 
-The one scenario where Nearby could plausibly add value — two Android phones already sharing a Wi-Fi/hotspot network wanting a higher-bandwidth local link — is already served by this repo's own Wi-Fi Aware transport, without taking on Google Play Services as a dependency or the SPM/CocoaPods packaging friction on iOS. That leaves no case where adding Nearby, even opt-in, is worth the added attack surface and dependency weight.
+[ni5arga/protestchat](https://github.com/ni5arga/protestchat) (MIT) is an unrelated, early-stage project with overlapping goals. Facts below are from its README at time of writing **(verify before relying on them)**.
 
-# Comparison: Briar's transports vs. ours
+| | ochat | protestchat |
+|---|---|---|
+| Stack | Kotlin / Compose, Android + Wear OS | ~85% shared TypeScript (React Native / Expo) with Swift and Kotlin BLE modules |
+| Native layer | Full Android client | Intended "dumb byte pipe": advertise, discover, connect, send and receive bytes. No chat logic or crypto |
+| Routing | TTL-limited flooding (max 7 hops) with gossip sync | Epidemic carry-and-forward of unexpired sealed envelopes; recipient is whoever can decrypt |
+| Metadata | Packet header carries plaintext 8-byte sender and recipient IDs (`docs/file_transfer.md`) | Claims a captured phone reveals nothing about who talked to whom; check against its threat model |
+| Channels | IRC-style, passphrase-protected option | Passphrase-only, no owner / admin / kick, by design |
+| Groups | Not a distinct fan-out model | Fan-out, one sealed copy per member, capped at 15 |
+| Transports | BLE, Wi-Fi Aware, Nostr, optional Tor | BLE; Wi-Fi Direct mentioned; LoRa / gateway planned |
+| iOS status | Not applicable (Android-only) | Android builds; iOS blocked on native integration |
+| Maturity | Release gate, Mesh Lab, golden vectors, security review notes (`docs/security-review-jul-27.md`) | ~50 commits; no independent audit; no reproducible builds; iOS background relaying unresolved; scrypt (N=2^14), Argon2id pending |
+| License | GPL-3.0 | MIT |
 
-Do we already support internet-based connections? **Yes.** This repo's Nostr layer (public relays, geohash channels, private-message fallback when the mesh is unreachable) plus optional built-in Tor (Arti) is already our internet transport — see [Platform & stack differences](#platform--stack-differences) and the Nostr Protocol section of the README. The question below is really "does [Briar](https://github.com/briar/briar)'s *design* for combining internet and short-range transports suggest anything we're missing," not "do we have one at all."
+Takeaways for ochat:
+- **Their critique of channels:** protestchat says bitchat channel commands were validated only by the issuing client, so any member could seize a channel. ochat inherits that design; review `docs/` and the channel code against the claim before dismissing or adopting it.
+- **"One implementation to audit"** is a good principle that Option A also satisfies.
+- **Their design is intent, not shipped outcome.** Judge both projects by what is built and tested, not by what is planned.
+- **iOS background BLE** is unsolved there too, which supports treating it as gating risk 1.
 
-Briar's model, confirmed from its wiki and site:
+## 7. Transport decision: Google Nearby Connections
 
-- **Bluetooth/Wi-Fi is contact-to-contact only, not a mesh.** Briar's sync protocol (BSP, over a delay-tolerant transport-security layer called BTP) runs directly between two devices that already trust each other as contacts. There is no routing table *and* no epidemic relay through strangers either — a message only moves when the sender's device and the recipient's device are directly connected, over Bluetooth, Wi-Fi Direct, or Wi-Fi LAN.
-- **Asynchronous delivery when contacts are never both online is solved by Briar Mailbox**, not by other users' phones carrying your data. Mailbox is a small server (commonly self-hosted, e.g. on a Raspberry Pi) that a user reaches over Tor to drop off and pick up messages for their contacts. Briar's own "social/public mesh" research explores delay-tolerant forwarding through non-contacts, but that is a research track, not the shipped Bluetooth/Wi-Fi plugin behavior.
-- **Wi-Fi Direct and Wi-Fi LAN are both implemented as Briar's own plugins** (in `bramble-android`), not via a third-party SDK like Nearby Connections — independent confirmation that owning the radio layer directly, as this repo already does in `mesh/` and `wifi-aware/`, is the path a comparable privacy-first project converged on too.
-- **Tor is mandatory for all of Briar's internet sync**, with no public-relay equivalent — every internet message goes over a Tor circuit either straight to the contact or to their Mailbox. This repo instead defaults to public Nostr relays (visible to the relay operator unless Tor is also enabled) and treats Tor as an added privacy layer rather than the only internet path.
+Decision: do not use Nearby Connections, as a primary or fallback transport.
 
-## What's actually different from our design, and why we keep ours
+- **iOS reach.** Per Google's documentation, Nearby on iOS has only brought up the Wi-Fi LAN medium, which requires both phones to be on the same network, with BLE listed as "in development" **(verify current status and date)**. That gives no path in an infrastructure-less scenario.
+- **Fallback value.** A fallback exists to cover what the primary transport cannot. Where shared Wi-Fi exists, peers still need app-level discovery and transport, and AP client isolation is common; where it does not, Nearby adds nothing on iOS.
+- **Advertising identifier.** Nearby gives no control over the advertised identifier, which can act as a tracking beacon **(verify)**. Owning the advertisement allows rotation.
+- **Dependencies.** It requires Google Play Services on Android, and iOS distribution is via Swift Package Manager only, with no CocoaPods support (open request since May 2023), which affects React Native / Flutter plugin systems.
+- **Local high-bandwidth link.** On supported Android devices this repo's Wi-Fi Aware transport already covers it, without a shared network or Play Services.
 
-- **Contact-only direct sync vs. epidemic relay through strangers.** Briar's no-relay-through-strangers rule shrinks the set of devices that ever hold your ciphertext, but it means two contacts who are never in range of each other *and* never both reach a Mailbox simply don't sync — there's no "courier" effect. This repo's mesh deliberately relays through any nearby peer (the "Four ways to send" model in [How it Works](#how-it-works)), trading a larger anonymity set of devices briefly holding undecryptable envelopes for reach across a scattered, disconnected crowd — which is the scenario (jammed square, moving crowd) this project is built for.
-- **Mailbox is worth a second look as a design input, not a reason to switch models.** A self-hosted, Tor-reachable store-and-forward box is a reasonable complement to Nostr relays for guaranteed-delivery-when-offline — but it's an additive feature (an optional, self-hosted drop box), not a replacement for either the epidemic BLE relay or the public Nostr fallback already in place.
-- **Mandatory Tor vs. optional Tor over public relays** is a real trade-off worth flagging, not copying wholesale: Tor-only, as Briar does it, removes the public-relay operator from the trust picture entirely, at the cost of requiring Tor connectivity (which is itself blockable/fingerprintable in some jammed/censored environments) for *any* internet sync. Keeping public Nostr relays as a non-Tor fallback, with Tor as an optional hardening layer, keeps us working in places where Tor itself is the thing being blocked.
+### Spike: is iOS 26 Wi-Fi Aware usable as a cross-platform transport?
+
+Background (from Apple and press coverage, **verify against Apple documentation**): iOS 26 ships a `WiFiAware` framework, supported on iPhone 12 and later. It needs the `com.apple.developer.wifi-aware` entitlement and services declared under the `WiFiAwareServices` Info.plist key, with Publishable / Subscribable roles. Devices are paired through system UI (DeviceDiscoveryUI or AccessorySetupKit). Android has had Wi-Fi Aware APIs since Android 8, but only on devices with hardware support. Apple developer-forum threads report cross-platform interoperability challenges, and a recent third-party write-up shows an embedded device connecting to an iPhone.
+
+How to check:
+1. **Read the primary sources.** Apple's WiFiAware framework documentation and WWDC25 session 228; Android's `android.net.wifi.aware` docs. Note the supported roles, pairing requirements, data-path security, and any background restrictions.
+2. **Check the pairing model against the mesh.** If iOS requires user-mediated pairing per peer, it cannot auto-connect to arbitrary strangers, which conflicts with open mesh relay. It might still suit a "paired contacts" fast path (file and voice transfer).
+3. **Run a two-device test.** An iPhone 12 or later on iOS 26 and a Wi-Fi Aware-capable Android phone. Confirm `PackageManager.FEATURE_WIFI_AWARE` on the Android device. Test discovery, pairing, a data path, and throughput, with the app foregrounded and backgrounded.
+4. **Compare against BLE.** Measure throughput, latency, range and battery against the BLE mesh.
+5. **Decide.** Adopt it as an optional transport behind the shared `Transport` interface only if interoperability works and pairing is acceptable. Otherwise record it as not viable and stay BLE-first on iOS.
+
+Do not use device-identifying details or real location data in test notes; keep logs local (see `AGENTS.md`).
+
+## 8. Comparison: Briar's transports vs ochat
+
+ochat already has internet transports: Nostr (public relays, geohash channels, private-message fallback) plus optional Tor (Arti). The question is whether Briar's design suggests anything missing. Facts below come from Briar's documentation **(verify and add links for each)**.
+
+Briar:
+- **Short-range sync is contact-to-contact.** Briar's sync (BSP over BTP) runs directly between devices that already trust each other, over Bluetooth, Wi-Fi Direct or Wi-Fi LAN. There is no relay through strangers.
+- **Offline delivery uses Briar Mailbox,** a small, often self-hosted server reached over Tor to drop off and pick up messages.
+- **Own radio plugins.** Wi-Fi Direct and LAN are Briar's own plugins, not a third-party SDK. This is consistent with, but only weak evidence for, owning the radio layer.
+- **Tor is mandatory** for all internet sync, with no public-relay equivalent.
+
+Differences and decisions:
+- **Relay through strangers vs contact-only.** Briar limits who holds your ciphertext but has no courier effect for contacts who are never in range or online together. ochat relays through nearby peers to reach a scattered crowd. Because the packet header carries plaintext sender and recipient IDs, do not claim a larger anonymity set without analysis; document the metadata exposure.
+- **Mailbox.** A self-hosted, Tor-reachable store-and-forward box is worth evaluating as an additive feature for guaranteed delivery when offline. It needs a design: threat model, trust, and fit with the Nostr fallback. It is not a replacement for BLE relay or Nostr.
+- **Mandatory vs optional Tor.** Briar's approach removes the relay operator from the trust picture but fails where Tor is blocked. ochat keeps public Nostr relays with optional Tor. Public relays see client IP and message metadata unless Tor is on; document this clearly.
