@@ -1,13 +1,11 @@
 package com.bitchat.android.nostr
 
-import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NostrProtocolTest {
-    private val gson = Gson()
 
     @Test
     fun decryptPrivateMessage_acceptsAuthenticatedSeal() {
@@ -65,7 +63,7 @@ class NostrProtocolTest {
                 senderPublicKeyHex = giftWrap.pubkey,
                 recipientPrivateKeyHex = recipient.privateKeyHex
             )
-            val seal = gson.fromJson(sealJson, NostrEvent::class.java)
+            val seal = requireNotNull(NostrEvent.fromJsonString(sealJson))
 
             assertTimestampWithinIosLookback("gift wrap", giftWrap.createdAt, beforeCreation, afterCreation)
             assertTimestampWithinIosLookback("seal", seal.createdAt, beforeCreation, afterCreation)
@@ -103,7 +101,7 @@ class NostrProtocolTest {
         )
         val rumor = rumorBase.copy(id = rumorBase.computeEventIdHex())
         val sealContent = NostrCrypto.encryptNIP44(
-            plaintext = gson.toJson(rumor),
+            plaintext = rumor.toJsonString(),
             recipientPublicKeyHex = recipient.publicKeyHex,
             senderPrivateKeyHex = sealSigner.privateKeyHex
         )
@@ -117,7 +115,7 @@ class NostrProtocolTest {
 
         val (wrapPrivateKey, wrapPublicKey) = NostrCrypto.generateKeyPair()
         val giftWrapContent = NostrCrypto.encryptNIP44(
-            plaintext = gson.toJson(seal),
+            plaintext = seal.toJsonString(),
             recipientPublicKeyHex = recipient.publicKeyHex,
             senderPrivateKeyHex = wrapPrivateKey
         )

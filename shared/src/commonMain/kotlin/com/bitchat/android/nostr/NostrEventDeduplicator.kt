@@ -1,7 +1,9 @@
 package com.bitchat.android.nostr
 
-import android.util.Log
-import java.util.concurrent.ConcurrentHashMap
+import com.bitchat.android.protocol.PlatformLock
+import com.bitchat.android.protocol.PlatformLog
+import com.bitchat.android.protocol.withLock
+import kotlin.concurrent.Volatile
 
 /**
  * Efficient LRU-based Nostr event deduplication system
@@ -26,12 +28,13 @@ class NostrEventDeduplicator(
         
         @Volatile
         private var INSTANCE: NostrEventDeduplicator? = null
-        
+        private val instanceLock = PlatformLock()
+
         /**
          * Get the singleton instance of the deduplicator
          */
         fun getInstance(): NostrEventDeduplicator {
-            return INSTANCE ?: synchronized(this) {
+            return INSTANCE ?: instanceLock.withLock {
                 INSTANCE ?: NostrEventDeduplicator().also { INSTANCE = it }
             }
         }
@@ -47,14 +50,14 @@ class NostrEventDeduplicator(
     )
     
     // Hash map for O(1) lookup - maps event ID to node
-    private val nodeMap = ConcurrentHashMap<String, LRUNode>()
+    private val nodeMap = HashMap<String, LRUNode>()
     
     // Doubly-linked list for LRU ordering
     private val head = LRUNode("HEAD") // Dummy head node
     private val tail = LRUNode("TAIL") // Dummy tail node
     
     // Lock for thread-safe LRU operations
-    private val lruLock = Any()
+    private val lruLock = PlatformLock()
     
     // Statistics
     @Volatile
@@ -69,7 +72,7 @@ class NostrEventDeduplicator(
         head.next = tail
         tail.prev = head
         
-        Log.d(TAG, "Initialized NostrEventDeduplicator with capacity: $maxCapacity")
+        PlatformLog.d(TAG, "Initialized NostrEventDeduplicator with capacity: $maxCapacity")
     }
     
     /**
@@ -79,7 +82,7 @@ class NostrEventDeduplicator(
      * @return true if the event is a duplicate (already seen), false if it's new
      */
     fun isDuplicate(eventId: String): Boolean {
-        synchronized(lruLock) {
+        lruLock.withLock {
             totalChecks++
 
             val existingNode = nodeMap[eventId]
@@ -90,7 +93,7 @@ class NostrEventDeduplicator(
                 duplicateCount++
                 
                 if (duplicateCount % 100 == 0L) {
-                    Log.v(TAG, "Duplicate event detected: $eventId (${duplicateCount} total duplicates)")
+                    PlatformLog.d(TAG, "Duplicate event detected: $eventId (${duplicateCount} total duplicates)")
                 }
                 
                 return true
@@ -128,7 +131,7 @@ class NostrEventDeduplicator(
      * Get current statistics about the deduplicator
      */
     fun getStats(): DeduplicationStats {
-        synchronized(lruLock) {
+        lruLock.withLock {
             return DeduplicationStats(
                 capacity = maxCapacity,
                 currentSize = nodeMap.size,
@@ -144,7 +147,7 @@ class NostrEventDeduplicator(
      * Clear all cached event IDs (useful for testing or resetting state)
      */
     fun clear() {
-        synchronized(lruLock) {
+        lruLock.withLock {
             nodeMap.clear()
             head.next = tail
             tail.prev = head
@@ -154,21 +157,19 @@ class NostrEventDeduplicator(
             duplicateCount = 0L
             evictionCount = 0L
             
-            Log.d(TAG, "Cleared all cached event IDs")
+            PlatformLog.d(TAG, "Cleared all cached event IDs")
         }
     }
     
     /**
      * Check if the deduplicator contains a specific event ID
      */
-    fun contains(eventId: String): Boolean {
-        return nodeMap.containsKey(eventId)
-    }
+    fun contains(eventId: String): Boolean = lruLock.withLock { nodeMap.containsKey(eventId) }
     
     /**
      * Get the current size of the cache
      */
-    fun size(): Int = nodeMap.size
+    fun size(): Int = lruLock.withLock { nodeMap.size }
     
     // MARK: - Private LRU Implementation Methods
     
@@ -232,7 +233,7 @@ class NostrEventDeduplicator(
                 evictionCount++
                 
                 if (evictionCount % 500 == 0L) {
-                    Log.v(TAG, "Evicted event ID: ${evictedNode.eventId} (${evictionCount} total evictions)")
+                    PlatformLog.d(TAG, "Evicted event ID: ${evictedNode.eventId} (${evictionCount} total evictions)")
                 }
             } else {
                 break // Should not happen, but safety check
@@ -255,6 +256,6 @@ data class DeduplicationStats(
     override fun toString(): String {
         return "DeduplicationStats(capacity=$capacity, size=$currentSize, " +
                "checks=$totalChecks, duplicates=$duplicateCount, evictions=$evictionCount, " +
-               "hitRate=${"%.2f".format(hitRate * 100)}%)"
+               "hitRate=${(hitRate * 10_000).toInt() / 100.0}%)"
     }
 }

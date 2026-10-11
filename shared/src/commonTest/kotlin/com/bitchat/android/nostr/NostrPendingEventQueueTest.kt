@@ -1,13 +1,13 @@
 package com.bitchat.android.nostr
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.Test
 
 class NostrPendingEventQueueTest {
     @Test
-    fun `empty relay set is not queued`() {
+    fun emptyRelaySetIsNotQueued() {
         val queue = NostrPendingEventQueue(capacity = 2)
 
         assertNull(queue.enqueue(event("empty"), emptyList(), liveLocationToken = null))
@@ -15,7 +15,7 @@ class NostrPendingEventQueueTest {
     }
 
     @Test
-    fun `capacity evicts the oldest publish`() {
+    fun capacityEvictsTheOldestPublish() {
         val queue = NostrPendingEventQueue(capacity = 2)
         queue.enqueue(event("one"), listOf("relay"), liveLocationToken = null)
         queue.enqueue(event("two"), listOf("relay"), liveLocationToken = null)
@@ -28,7 +28,7 @@ class NostrPendingEventQueueTest {
     }
 
     @Test
-    fun `duplicate event publishes retain independent delivery state`() {
+    fun duplicateEventPublishesRetainIndependentDeliveryState() {
         val queue = NostrPendingEventQueue(capacity = 4)
         val signedEvent = event("same")
         val firstId = requireNotNull(
@@ -55,7 +55,7 @@ class NostrPendingEventQueueTest {
     }
 
     @Test
-    fun `privacy purge retains non-live publishes`() {
+    fun privacyPurgeRetainsNonLivePublishes() {
         val queue = NostrPendingEventQueue(capacity = 4)
         queue.enqueue(event("manual"), listOf("relay"), liveLocationToken = null)
         queue.enqueue(event("live"), listOf("relay"), liveLocationToken = 42L)

@@ -1,9 +1,9 @@
 package com.bitchat.android.nostr
 
-import android.util.Log
+import com.bitchat.android.protocol.PlatformLog
+import com.bitchat.android.protocol.nowMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.security.MessageDigest
 import kotlin.random.Random
 
 /**
@@ -56,24 +56,24 @@ object NostrProofOfWork {
         
         // Require explicit nonce tag to recognize PoW per NIP-13 intent
         if (!hasNonce(event)) {
-            Log.w(TAG, "Event ${event.id.take(16)}... missing nonce tag; treating as no PoW")
+            PlatformLog.w(TAG, "Event ${event.id.take(16)}... missing nonce tag; treating as no PoW")
             return false
         }
         
         val actualDifficulty = calculateDifficulty(event.id)
         val committedDifficulty = getCommittedDifficulty(event)
         
-        Log.d(TAG, "Validating PoW: actual=$actualDifficulty, required=$minimumDifficulty, committed=$committedDifficulty")
+        PlatformLog.d(TAG, "Validating PoW: actual=$actualDifficulty, required=$minimumDifficulty, committed=$committedDifficulty")
         
         // Check if actual difficulty meets requirement
         if (actualDifficulty < minimumDifficulty) {
-            Log.w(TAG, "Event ${event.id.take(16)}... has insufficient difficulty: $actualDifficulty < $minimumDifficulty")
+            PlatformLog.w(TAG, "Event ${event.id.take(16)}... has insufficient difficulty: $actualDifficulty < $minimumDifficulty")
             return false
         }
         
         // If there's a committed difficulty, it should match or exceed the minimum
         if (committedDifficulty != null && committedDifficulty < minimumDifficulty) {
-            Log.w(TAG, "Event ${event.id.take(16)}... has committed difficulty $committedDifficulty but achieved $actualDifficulty (possible spam)")
+            PlatformLog.w(TAG, "Event ${event.id.take(16)}... has committed difficulty $committedDifficulty but achieved $actualDifficulty (possible spam)")
             return false
         }
         
@@ -94,8 +94,8 @@ object NostrProofOfWork {
     ): NostrEvent? = withContext(Dispatchers.Default) {
         if (targetDifficulty <= 0) return@withContext event
         
-        Log.d(TAG, "Starting PoW mining for difficulty $targetDifficulty...")
-        val startTime = System.currentTimeMillis()
+        PlatformLog.d(TAG, "Starting PoW mining for difficulty $targetDifficulty...")
+        val startTime = nowMillis()
         
         var nonce = Random.nextLong(0, 1_000_000).toString()
         var iterations = 0
@@ -109,8 +109,8 @@ object NostrProofOfWork {
             val actualDifficulty = calculateDifficulty(eventId)
             
             if (actualDifficulty >= targetDifficulty) {
-                val timeElapsed = System.currentTimeMillis() - startTime
-                Log.i(TAG, "✅ PoW mining successful! Difficulty: $actualDifficulty, iterations: $iterations, time: ${timeElapsed}ms")
+                val timeElapsed = nowMillis() - startTime
+                PlatformLog.i(TAG, "✅ PoW mining successful! Difficulty: $actualDifficulty, iterations: $iterations, time: ${timeElapsed}ms")
                 
                 // Return the event with the computed ID
                 return@withContext eventWithNonce.copy(id = eventId)
@@ -122,13 +122,13 @@ object NostrProofOfWork {
             
             // Log progress every 100,000 iterations
             if (iterations % 100_000 == 0) {
-                val timeElapsed = System.currentTimeMillis() - startTime
-                Log.d(TAG, "PoW mining progress: $iterations iterations, ${timeElapsed}ms elapsed")
+                val timeElapsed = nowMillis() - startTime
+                PlatformLog.d(TAG, "PoW mining progress: $iterations iterations, ${timeElapsed}ms elapsed")
             }
         }
         
-        val timeElapsed = System.currentTimeMillis() - startTime
-        Log.w(TAG, "❌ PoW mining failed after $maxIterations iterations (${timeElapsed}ms)")
+        val timeElapsed = nowMillis() - startTime
+        PlatformLog.w(TAG, "❌ PoW mining failed after $maxIterations iterations (${timeElapsed}ms)")
         return@withContext null
     }
     
@@ -149,7 +149,7 @@ object NostrProofOfWork {
         newTags.add(listOf("nonce", nonce, targetDifficulty.toString()))
         
         // Update created_at as recommended by NIP-13
-        val updatedCreatedAt = (System.currentTimeMillis() / 1000).toInt()
+        val updatedCreatedAt = (nowMillis() / 1000).toInt()
         
         return event.copy(
             tags = newTags,

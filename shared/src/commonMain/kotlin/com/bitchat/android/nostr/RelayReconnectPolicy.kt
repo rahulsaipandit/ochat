@@ -21,7 +21,7 @@ import kotlin.math.pow
  * user every internet DM, delivery receipt and geohash channel until they
  * notice and restart the app.
  */
-internal object RelayReconnectPolicy {
+object RelayReconnectPolicy {
 
     /**
      * Attempt count past which the interval stops growing. Beyond this the

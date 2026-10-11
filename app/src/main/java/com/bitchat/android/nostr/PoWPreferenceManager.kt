@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Manages Proof of Work preferences for Nostr events
  */
-object PoWPreferenceManager {
+object PoWPreferenceManager : NostrPowSettingsProvider {
     
     private const val PREFS_NAME = "pow_preferences"
     private const val KEY_POW_ENABLED = "pow_enabled"
@@ -40,6 +40,7 @@ object PoWPreferenceManager {
     fun init(context: Context) {
         if (isInitialized) return
         
+        NostrProtocol.powSettingsProvider = this
         sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         
         // Load current values
@@ -133,6 +134,13 @@ object PoWPreferenceManager {
         return _isMining.value
     }
     
+    override fun currentSettings(): NostrPowSettings =
+        NostrPowSettings(enabled = _powEnabled.value, difficulty = _powDifficulty.value)
+
+    override fun miningStarted() = startMining()
+
+    override fun miningStopped() = stopMining()
+
     /**
      * Start mining state - triggers animated indicators
      */

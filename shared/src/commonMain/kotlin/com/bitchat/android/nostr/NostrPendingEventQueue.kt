@@ -1,12 +1,15 @@
 package com.bitchat.android.nostr
 
+import com.bitchat.android.protocol.PlatformLock
+import com.bitchat.android.protocol.withLock
+
 /**
  * Thread-safe bounded queue of relay deliveries awaiting a usable WebSocket.
  *
  * Queue entries have a local ID rather than using the Nostr event ID: the same signed event may be
  * intentionally published more than once with different relay sets or privacy provenance.
  */
-internal class NostrPendingEventQueue(
+class NostrPendingEventQueue(
     private val capacity: Int
 ) {
     init {
@@ -26,7 +29,7 @@ internal class NostrPendingEventQueue(
         val liveLocationToken: Long?
     )
 
-    private val lock = Any()
+    private val lock = PlatformLock()
     private val entries = ArrayDeque<Entry>()
     private var nextQueueId = 1L
 
@@ -38,7 +41,7 @@ internal class NostrPendingEventQueue(
         val pendingRelays = relayUrls.filterTo(linkedSetOf()) { it.isNotBlank() }
         if (pendingRelays.isEmpty()) return null
 
-        return synchronized(lock) {
+        return lock.withLock {
             if (entries.size >= capacity) entries.removeFirst()
             val queueId = nextQueueId++
             entries.addLast(
@@ -53,7 +56,7 @@ internal class NostrPendingEventQueue(
         }
     }
 
-    fun pendingForRelay(relayUrl: String): List<Delivery> = synchronized(lock) {
+    fun pendingForRelay(relayUrl: String): List<Delivery> = lock.withLock {
         entries
             .asSequence()
             .filter { relayUrl in it.pendingRelayUrls }
@@ -62,7 +65,7 @@ internal class NostrPendingEventQueue(
     }
 
     fun markDelivered(queueId: Long, relayUrl: String) {
-        synchronized(lock) {
+        lock.withLock {
             val iterator = entries.iterator()
             while (iterator.hasNext()) {
                 val entry = iterator.next()
@@ -75,16 +78,16 @@ internal class NostrPendingEventQueue(
     }
 
     fun removeLiveLocationEvents() {
-        synchronized(lock) {
+        lock.withLock {
             entries.removeAll { it.liveLocationToken != null }
         }
     }
 
     fun clear() {
-        synchronized(lock) {
+        lock.withLock {
             entries.clear()
         }
     }
 
-    internal fun size(): Int = synchronized(lock) { entries.size }
+    fun size(): Int = lock.withLock { entries.size }
 }

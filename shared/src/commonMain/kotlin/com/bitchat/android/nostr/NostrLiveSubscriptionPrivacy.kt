@@ -1,6 +1,6 @@
 package com.bitchat.android.nostr
 
-internal object NostrLiveSubscriptionPrivacy {
+object NostrLiveSubscriptionPrivacy {
     fun closeTargets(
         liveSubscriptionIds: Set<String>,
         subscriptionsByRelay: Map<String, Set<String>>,

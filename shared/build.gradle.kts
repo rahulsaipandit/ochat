@@ -23,6 +23,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.cryptography.core)
             implementation(libs.secp256k1.kmp)
+            implementation(libs.kotlinx.serialization.json)
         }
         androidMain.dependencies {
             implementation(libs.cryptography.provider.jdk)

@@ -16,6 +16,7 @@ import com.bitchat.android.nostr.NostrBackgroundRuntime
 import com.bitchat.android.nostr.NostrIdentityBridge
 import com.bitchat.android.nostr.NostrProtocol
 import com.bitchat.android.nostr.NostrRelayManager
+import com.bitchat.android.nostr.getInstance
 import com.bitchat.android.nostr.NostrSubscriptionManager
 import com.bitchat.android.nostr.PoWPreferenceManager
 import com.bitchat.android.nostr.GeohashAliasRegistry
@@ -119,7 +120,7 @@ class GeohashViewModel(
         geoTimer = null
         try { NostrIdentityBridge.clearAllAssociations(getApplication()) } catch (_: Exception) {}
         NostrBackgroundRuntime.resetSubscriptions()
-        try { com.bitchat.android.nostr.NostrRelayManager.getInstance(getApplication()).clearAllOnPanic() } catch (_: Exception) {}
+        try { NostrRelayManager.getInstance(getApplication()).clearAllOnPanic() } catch (_: Exception) {}
         try { com.bitchat.android.nostr.LocationNotesManager.getInstance().stop() } catch (_: Exception) {}
     }
 

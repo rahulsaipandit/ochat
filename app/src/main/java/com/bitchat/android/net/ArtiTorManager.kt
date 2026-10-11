@@ -1,5 +1,7 @@
 package com.bitchat.android.net
 
+import com.bitchat.android.nostr.NostrRelayManager
+import com.bitchat.android.nostr.shared
 import android.app.Application
 import android.util.Log
 import com.bitchat.android.util.AppConstants
@@ -332,7 +334,7 @@ class ArtiTorManager private constructor() {
         } catch (_: Throwable) {
         }
         try {
-            com.bitchat.android.nostr.NostrRelayManager.shared.resetAllConnections()
+            NostrRelayManager.shared.resetAllConnections()
         } catch (_: Throwable) {
         }
     }

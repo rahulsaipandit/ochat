@@ -1,8 +1,7 @@
 package com.bitchat.android.nostr
 
-import android.util.Log
-import com.google.gson.Gson
-import com.google.gson.JsonParser
+import com.bitchat.android.protocol.PlatformLog
+import com.bitchat.android.protocol.nowMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -13,7 +12,9 @@ import kotlinx.coroutines.withContext
 object NostrProtocol {
     
     private const val TAG = "NostrProtocol"
-    private val gson = Gson()
+
+    /** Device-side proof-of-work preference; platforms register theirs at startup. */
+    var powSettingsProvider: NostrPowSettingsProvider = DisabledNostrPowSettings
     
     /**
      * Create NIP-17 private message gift-wrap (receiver copy only per iOS)
@@ -24,12 +25,12 @@ object NostrProtocol {
         recipientPubkey: String,
         senderIdentity: NostrIdentity
     ): List<NostrEvent> {
-        Log.d(TAG, "Creating private message for recipient: ${recipientPubkey.take(16)}...")
+        PlatformLog.d(TAG, "Creating private message for recipient: ${recipientPubkey.take(16)}...")
         
         // 1. Create the rumor (unsigned kind 14) with p-tag
         val rumorBase = NostrEvent(
             pubkey = senderIdentity.publicKeyHex,
-            createdAt = (System.currentTimeMillis() / 1000).toInt(),
+            createdAt = (nowMillis() / 1000).toInt(),
             kind = NostrKind.DIRECT_MESSAGE,
             tags = listOf(listOf("p", recipientPubkey)),
             content = content
@@ -50,7 +51,7 @@ object NostrProtocol {
             seal = sealedEvent,
             recipientPubkey = recipientPubkey
         )
-        Log.d(TAG, "Created gift wrap: toRecipient=${giftWrapToRecipient.id.take(16)}...")
+        PlatformLog.d(TAG, "Created gift wrap: toRecipient=${giftWrapToRecipient.id.take(16)}...")
         return listOf(giftWrapToRecipient)
     }
     
@@ -62,40 +63,37 @@ object NostrProtocol {
         giftWrap: NostrEvent,
         recipientIdentity: NostrIdentity
     ): Triple<String, String, Int>? {
-        Log.v(TAG, "Starting decryption of gift wrap: ${giftWrap.id.take(16)}...")
         
         return try {
             // 1. Unwrap the gift wrap
             val seal = unwrapGiftWrap(giftWrap, recipientIdentity.privateKeyHex)
                 ?: run {
-                    Log.w(TAG, "❌ Failed to unwrap gift wrap")
+                    PlatformLog.w(TAG, "❌ Failed to unwrap gift wrap")
                     return null
                 }
             
-            Log.v(TAG, "Successfully unwrapped gift wrap from: ${seal.pubkey.take(16)}...")
 
             if (seal.kind != NostrKind.SEAL || !seal.isValidSignature()) {
-                Log.w(TAG, "❌ Invalid NIP-17 seal signature")
+                PlatformLog.w(TAG, "❌ Invalid NIP-17 seal signature")
                 return null
             }
 
             // 2. Open the seal
             val rumor = openSeal(seal, recipientIdentity.privateKeyHex)
                 ?: run {
-                    Log.w(TAG, "❌ Failed to open seal")
+                    PlatformLog.w(TAG, "❌ Failed to open seal")
                     return null
                 }
 
             if (seal.pubkey != rumor.pubkey) {
-                Log.w(TAG, "❌ NIP-17 seal pubkey does not match rumor pubkey")
+                PlatformLog.w(TAG, "❌ NIP-17 seal pubkey does not match rumor pubkey")
                 return null
             }
 
-            Log.v(TAG, "Successfully opened seal")
             
             Triple(rumor.content, rumor.pubkey, rumor.createdAt)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to decrypt private message: ${e.message}")
+            PlatformLog.w(TAG, "Failed to decrypt private message: ${e.message}")
             null
         }
     }
@@ -119,7 +117,7 @@ object NostrProtocol {
         
         val event = NostrEvent(
             pubkey = senderIdentity.publicKeyHex,
-            createdAt = (System.currentTimeMillis() / 1000).toInt(),
+            createdAt = (nowMillis() / 1000).toInt(),
             kind = NostrKind.TEXT_NOTE,
             tags = tags,
             content = content
@@ -141,7 +139,7 @@ object NostrProtocol {
 
         val event = NostrEvent(
             pubkey = senderIdentity.publicKeyHex,
-            createdAt = (System.currentTimeMillis() / 1000).toInt(),
+            createdAt = (nowMillis() / 1000).toInt(),
             kind = NostrKind.GEOHASH_PRESENCE,
             tags = tags,
             content = ""
@@ -175,20 +173,20 @@ object NostrProtocol {
         
         var event = NostrEvent(
             pubkey = senderIdentity.publicKeyHex,
-            createdAt = (System.currentTimeMillis() / 1000).toInt(),
+            createdAt = (nowMillis() / 1000).toInt(),
             kind = NostrKind.EPHEMERAL_EVENT,
             tags = tags,
             content = content
         )
         
         // Check if Proof of Work is enabled
-        val powSettings = PoWPreferenceManager.getCurrentSettings()
+        val powSettings = powSettingsProvider.currentSettings()
         if (powSettings.enabled && powSettings.difficulty > 0) {
-            Log.d(TAG, "PoW enabled for geohash event: difficulty=${powSettings.difficulty}")
+            PlatformLog.d(TAG, "PoW enabled for geohash event: difficulty=${powSettings.difficulty}")
             
             try {
                 // Start mining state for animated indicators
-                PoWPreferenceManager.startMining()
+                powSettingsProvider.miningStarted()
                 
                 // Mine the event before signing
                 val minedEvent = NostrProofOfWork.mineEvent(
@@ -200,13 +198,13 @@ object NostrProtocol {
                 if (minedEvent != null) {
                     event = minedEvent
                     val actualDifficulty = NostrProofOfWork.calculateDifficulty(event.id)
-                    Log.d(TAG, "✅ PoW mining successful: target=${powSettings.difficulty}, actual=$actualDifficulty, nonce=${NostrProofOfWork.getNonce(event)}")
+                    PlatformLog.d(TAG, "✅ PoW mining successful: target=${powSettings.difficulty}, actual=$actualDifficulty, nonce=${NostrProofOfWork.getNonce(event)}")
                 } else {
-                    Log.w(TAG, "❌ PoW mining failed, proceeding without PoW")
+                    PlatformLog.w(TAG, "❌ PoW mining failed, proceeding without PoW")
                 }
             } finally {
                 // Always stop mining state when done (success or failure)
-                PoWPreferenceManager.stopMining()
+                powSettingsProvider.miningStopped()
             }
         }
         
@@ -221,7 +219,7 @@ object NostrProtocol {
         senderPrivateKey: String,
         senderPublicKey: String
     ): NostrEvent {
-        val rumorJSON = gson.toJson(rumor)
+        val rumorJSON = rumor.toJsonString()
         
         val encrypted = NostrCrypto.encryptNIP44(
             plaintext = rumorJSON,
@@ -245,11 +243,10 @@ object NostrProtocol {
         seal: NostrEvent,
         recipientPubkey: String
     ): NostrEvent {
-        val sealJSON = gson.toJson(seal)
+        val sealJSON = seal.toJsonString()
         
         // Create new ephemeral key for gift wrap
         val (wrapPrivateKey, wrapPublicKey) = NostrCrypto.generateKeyPair()
-        Log.v(TAG, "Creating gift wrap with ephemeral key")
         
         // Encrypt the seal with the new ephemeral key
         val encrypted = NostrCrypto.encryptNIP44(
@@ -281,27 +278,15 @@ object NostrProtocol {
                 recipientPrivateKeyHex = recipientPrivateKey
             )
             
-            val jsonElement = JsonParser.parseString(decrypted)
-            if (!jsonElement.isJsonObject) {
-                Log.w(TAG, "Decrypted gift wrap is not a JSON object")
+            val jsonObject = (NostrJson.parse(decrypted) as? kotlinx.serialization.json.JsonObject) ?: run {
+                PlatformLog.w(TAG, "Decrypted gift wrap is not a JSON object")
                 return null
             }
+            val seal = NostrJson.parseEvent(jsonObject)
             
-            val jsonObject = jsonElement.asJsonObject
-            val seal = NostrEvent(
-                id = jsonObject.get("id")?.asString ?: "",
-                pubkey = jsonObject.get("pubkey")?.asString ?: "",
-                createdAt = jsonObject.get("created_at")?.asInt ?: 0,
-                kind = jsonObject.get("kind")?.asInt ?: 0,
-                tags = parseTagsFromJson(jsonObject.get("tags")?.asJsonArray) ?: emptyList(),
-                content = jsonObject.get("content")?.asString ?: "",
-                sig = jsonObject.get("sig")?.asString
-            )
-            
-            Log.v(TAG, "Unwrapped seal with kind: ${seal.kind}")
             seal
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to unwrap gift wrap: ${e.message}")
+            PlatformLog.w(TAG, "Failed to unwrap gift wrap: ${e.message}")
             null
         }
     }
@@ -317,42 +302,13 @@ object NostrProtocol {
                 recipientPrivateKeyHex = recipientPrivateKey
             )
             
-            val jsonElement = JsonParser.parseString(decrypted)
-            if (!jsonElement.isJsonObject) {
-                Log.w(TAG, "Decrypted seal is not a JSON object")
+            val jsonObject = (NostrJson.parse(decrypted) as? kotlinx.serialization.json.JsonObject) ?: run {
+                PlatformLog.w(TAG, "Decrypted seal is not a JSON object")
                 return null
             }
-            
-            val jsonObject = jsonElement.asJsonObject
-            NostrEvent(
-                id = jsonObject.get("id")?.asString ?: "",
-                pubkey = jsonObject.get("pubkey")?.asString ?: "",
-                createdAt = jsonObject.get("created_at")?.asInt ?: 0,
-                kind = jsonObject.get("kind")?.asInt ?: 0,
-                tags = parseTagsFromJson(jsonObject.get("tags")?.asJsonArray) ?: emptyList(),
-                content = jsonObject.get("content")?.asString ?: "",
-                sig = jsonObject.get("sig")?.asString
-            )
+            NostrJson.parseEvent(jsonObject)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to open seal: ${e.message}")
-            null
-        }
-    }
-    
-    private fun parseTagsFromJson(tagsArray: com.google.gson.JsonArray?): List<List<String>>? {
-        if (tagsArray == null) return emptyList()
-        
-        return try {
-            tagsArray.map { tagElement ->
-                if (tagElement.isJsonArray) {
-                    val tagArray = tagElement.asJsonArray
-                    tagArray.map { it.asString }
-                } else {
-                    emptyList()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse tags: ${e.message}")
+            PlatformLog.w(TAG, "Failed to open seal: ${e.message}")
             null
         }
     }

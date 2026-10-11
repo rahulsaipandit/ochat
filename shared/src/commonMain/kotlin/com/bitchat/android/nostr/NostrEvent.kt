@@ -1,9 +1,11 @@
 package com.bitchat.android.nostr
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.annotations.SerializedName
-import java.security.MessageDigest
+import com.bitchat.android.nostr.NostrJson.asLenientInt
+import com.bitchat.android.nostr.NostrJson.asLenientString
+import com.bitchat.android.nostr.NostrJson.asObject
+import com.bitchat.android.protocol.nowMillis
+import com.bitchat.android.protocol.sha256
+import com.bitchat.android.util.toHexString
 
 /**
  * Nostr Event structure following NIP-01
@@ -12,19 +14,20 @@ import java.security.MessageDigest
 data class NostrEvent(
     var id: String = "",
     val pubkey: String,
-    @SerializedName("created_at") val createdAt: Int,
+    val createdAt: Int,
     val kind: Int,
     val tags: List<List<String>>,
     val content: String,
     var sig: String? = null
 ) {
-    
+
     companion object {
         /**
-         * Create from JSON dictionary
+         * Create from a decoded JSON dictionary
          */
         fun fromJson(json: Map<String, Any>): NostrEvent? {
             return try {
+                @Suppress("UNCHECKED_CAST")
                 NostrEvent(
                     id = json["id"] as? String ?: "",
                     pubkey = json["pubkey"] as? String ?: return null,
@@ -38,19 +41,28 @@ data class NostrEvent(
                 null
             }
         }
-        
+
         /**
-         * Create from JSON string
+         * Create from a JSON string. Returns null unless pubkey, created_at, kind, tags and content
+         * are all present (the Gson-based parser used to return an object with null fields).
          */
         fun fromJsonString(jsonString: String): NostrEvent? {
             return try {
-                val gson = Gson()
-                gson.fromJson(jsonString, NostrEvent::class.java)
+                val obj = NostrJson.parse(jsonString)?.asObject() ?: return null
+                NostrEvent(
+                    id = obj["id"]?.asLenientString() ?: "",
+                    pubkey = obj["pubkey"]?.asLenientString() ?: return null,
+                    createdAt = obj["created_at"]?.asLenientInt() ?: return null,
+                    kind = obj["kind"]?.asLenientInt() ?: return null,
+                    tags = NostrJson.parseTags(obj["tags"] ?: return null),
+                    content = obj["content"]?.asLenientString() ?: return null,
+                    sig = obj["sig"]?.asLenientString()
+                )
             } catch (e: Exception) {
                 null
             }
         }
-        
+
         /**
          * Create a new text note event
          */
@@ -59,7 +71,7 @@ data class NostrEvent(
             publicKeyHex: String,
             privateKeyHex: String,
             tags: List<List<String>> = emptyList(),
-            createdAt: Int = (System.currentTimeMillis() / 1000).toInt()
+            createdAt: Int = (nowMillis() / 1000).toInt()
         ): NostrEvent {
             val event = NostrEvent(
                 pubkey = publicKeyHex,
@@ -70,7 +82,7 @@ data class NostrEvent(
             )
             return event.sign(privateKeyHex)
         }
-        
+
         /**
          * Create a new metadata event (kind 0)
          */
@@ -78,7 +90,7 @@ data class NostrEvent(
             metadata: String,
             publicKeyHex: String,
             privateKeyHex: String,
-            createdAt: Int = (System.currentTimeMillis() / 1000).toInt()
+            createdAt: Int = (nowMillis() / 1000).toInt()
         ): NostrEvent {
             val event = NostrEvent(
                 pubkey = publicKeyHex,
@@ -90,23 +102,23 @@ data class NostrEvent(
             return event.sign(privateKeyHex)
         }
     }
-    
+
     /**
      * Sign event with secp256k1 private key
      * Returns signed event with id and signature set
      */
     fun sign(privateKeyHex: String): NostrEvent {
         val (eventId, eventIdHash) = calculateEventId()
-        
+
         // Create signature using secp256k1
         val signature = signHash(eventIdHash, privateKeyHex)
-        
+
         return this.copy(
             id = eventId,
             sig = signature
         )
     }
-    
+
     /**
      * Compute event ID (NIP-01) without signing
      */
@@ -114,57 +126,64 @@ data class NostrEvent(
         val (eventId, _) = calculateEventId()
         return eventId
     }
-    
+
     /**
      * Calculate event ID according to NIP-01
      * Returns (hex_id, hash_bytes)
      */
     private fun calculateEventId(): Pair<String, ByteArray> {
-        // Create serialized array for hashing according to NIP-01
-        val serialized = listOf(
-            0,
-            pubkey,
-            createdAt,
-            kind,
-            tags,
-            content
-        )
-        
-        // Convert to JSON without escaping slashes (compact format)
-        val gson = GsonBuilder().disableHtmlEscaping().create()
-        val jsonString = gson.toJson(serialized)
-        
-        // SHA256 hash of the JSON string
-        val digest = MessageDigest.getInstance("SHA-256")
-        val jsonBytes = jsonString.toByteArray(Charsets.UTF_8)
-        val hash = digest.digest(jsonBytes)
-        
-        // Convert to hex
-        val hexId = hash.joinToString("") { "%02x".format(it) }
-        
-        return Pair(hexId, hash)
+        // [0, pubkey, created_at, kind, tags, content] in compact form
+        val serialized = StringBuilder()
+        serialized.append("[0,")
+        NostrJson.quote(serialized, pubkey)
+        serialized.append(',').append(createdAt).append(',').append(kind).append(',')
+        NostrJson.writeTags(serialized, tags)
+        serialized.append(',')
+        NostrJson.quote(serialized, content)
+        serialized.append(']')
+
+        val hash = sha256(NostrJson.utf8(serialized.toString()))
+        return Pair(hash.toHexString(), hash)
     }
-    
+
     /**
      * Sign hash using BIP-340 Schnorr signatures
      */
     private fun signHash(hash: ByteArray, privateKeyHex: String): String {
         return try {
-            // Use the real BIP-340 Schnorr signature from NostrCrypto
             NostrCrypto.schnorrSign(hash, privateKeyHex)
         } catch (e: Exception) {
             throw RuntimeException("Failed to sign event: ${e.message}", e)
         }
     }
-    
+
     /**
-     * Convert to JSON string
+     * Convert to JSON string. A null signature is omitted.
      */
     fun toJsonString(): String {
-        val gson = Gson()
-        return gson.toJson(this)
+        val out = StringBuilder()
+        writeJson(out)
+        return out.toString()
     }
-    
+
+    internal fun writeJson(out: StringBuilder) {
+        out.append("{\"id\":")
+        NostrJson.quote(out, id)
+        out.append(",\"pubkey\":")
+        NostrJson.quote(out, pubkey)
+        out.append(",\"created_at\":").append(createdAt)
+        out.append(",\"kind\":").append(kind)
+        out.append(",\"tags\":")
+        NostrJson.writeTags(out, tags)
+        out.append(",\"content\":")
+        NostrJson.quote(out, content)
+        sig?.let {
+            out.append(",\"sig\":")
+            NostrJson.quote(out, it)
+        }
+        out.append('}')
+    }
+
     /**
      * Validate event signature using BIP-340 Schnorr verification
      */
@@ -172,20 +191,20 @@ data class NostrEvent(
         return try {
             val signatureHex = sig ?: return false
             if (id.isEmpty() || pubkey.isEmpty()) return false
-            
+
             // Recalculate the event ID hash for verification
             val (calculatedId, messageHash) = calculateEventId()
-            
+
             // Check if the calculated ID matches the stored ID
             if (calculatedId != id) return false
-            
+
             // Verify the Schnorr signature
             NostrCrypto.schnorrVerify(messageHash, signatureHex, pubkey)
         } catch (e: Exception) {
             false
         }
     }
-    
+
     /**
      * Validate event structure and signature
      */
@@ -195,7 +214,7 @@ data class NostrEvent(
             if (pubkey.isEmpty() || content.isEmpty()) return false
             if (createdAt <= 0 || kind < 0) return false
             if (!NostrCrypto.isValidPublicKey(pubkey)) return false
-            
+
             // Signature validation
             isValidSignature()
         } catch (e: Exception) {
@@ -217,15 +236,3 @@ object NostrKind {
     const val EPHEMERAL_EVENT = 20000 // For geohash channels
     const val GEOHASH_PRESENCE = 20001 // For geohash presence heartbeat
 }
-
-/**
- * Extension functions for hex encoding/decoding
- */
-fun String.hexToByteArray(): ByteArray {
-    check(length % 2 == 0) { "Must have an even length" }
-    return chunked(2)
-        .map { it.toInt(16).toByte() }
-        .toByteArray()
-}
-
-fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it) }

@@ -1,9 +1,5 @@
 package com.bitchat.android.nostr
 
-import com.google.gson.*
-import com.google.gson.annotations.SerializedName
-import java.lang.reflect.Type
-
 /**
  * Nostr event filter for subscriptions
  * Compatible with iOS implementation
@@ -17,7 +13,7 @@ data class NostrFilter(
     val limit: Int? = null,
     private val tagFilters: Map<String, List<String>>? = null
 ) {
-    
+
     companion object {
         /**
          * Create filter for NIP-17 gift wraps
@@ -30,7 +26,7 @@ data class NostrFilter(
                 limit = 100
             )
         }
-        
+
         /**
          * Create filter for geohash-scoped ephemeral events (kind 20000 and 20001)
          */
@@ -69,7 +65,7 @@ data class NostrFilter(
                 limit = limit
             )
         }
-        
+
         /**
          * Create filter for text notes from specific authors
          */
@@ -81,7 +77,7 @@ data class NostrFilter(
                 limit = limit
             )
         }
-        
+
         /**
          * Create filter for geohash-scoped text notes (kind=1 with g tag)
          */
@@ -93,7 +89,7 @@ data class NostrFilter(
                 limit = limit
             )
         }
-        
+
         /**
          * Create filter for specific event IDs
          */
@@ -101,31 +97,30 @@ data class NostrFilter(
             return NostrFilter(ids = ids)
         }
     }
-    
+
     /**
-     * Custom JSON serializer to handle tag filters properly
+     * Wire form of the filter: standard fields in a fixed order, then each tag filter as `#name`.
      */
-    class FilterSerializer : JsonSerializer<NostrFilter> {
-        override fun serialize(src: NostrFilter, typeOfSrc: Type, context: JsonSerializationContext): JsonElement {
-            val jsonObject = JsonObject()
-            
-            // Standard fields
-            src.ids?.let { jsonObject.add("ids", context.serialize(it)) }
-            src.authors?.let { jsonObject.add("authors", context.serialize(it)) }
-            src.kinds?.let { jsonObject.add("kinds", context.serialize(it)) }
-            src.since?.let { jsonObject.addProperty("since", it) }
-            src.until?.let { jsonObject.addProperty("until", it) }
-            src.limit?.let { jsonObject.addProperty("limit", it) }
-            
-            // Tag filters with # prefix
-            src.tagFilters?.forEach { (tag, values) ->
-                jsonObject.add("#$tag", context.serialize(values))
-            }
-            
-            return jsonObject
+    internal fun writeJson(out: StringBuilder) {
+        out.append('{')
+        var first = true
+        fun field(name: String, write: () -> Unit) {
+            if (!first) out.append(',')
+            first = false
+            NostrJson.quote(out, name)
+            out.append(':')
+            write()
         }
+        ids?.let { field("ids") { NostrJson.writeStringList(out, it) } }
+        authors?.let { field("authors") { NostrJson.writeStringList(out, it) } }
+        kinds?.let { field("kinds") { out.append('[').append(it.joinToString(",")).append(']') } }
+        since?.let { field("since") { out.append(it) } }
+        until?.let { field("until") { out.append(it) } }
+        limit?.let { field("limit") { out.append(it) } }
+        tagFilters?.forEach { (tag, values) -> field("#$tag") { NostrJson.writeStringList(out, values) } }
+        out.append('}')
     }
-    
+
     /**
      * Create builder for complex filters
      */
@@ -137,19 +132,19 @@ data class NostrFilter(
         private var until: Int? = null
         private var limit: Int? = null
         private val tagFilters = mutableMapOf<String, List<String>>()
-        
+
         fun ids(vararg ids: String) = apply { this.ids = ids.toList() }
         fun authors(vararg authors: String) = apply { this.authors = authors.toList() }
         fun kinds(vararg kinds: Int) = apply { this.kinds = kinds.toList() }
         fun since(timestamp: Long) = apply { this.since = (timestamp / 1000).toInt() }
         fun until(timestamp: Long) = apply { this.until = (timestamp / 1000).toInt() }
         fun limit(count: Int) = apply { this.limit = count }
-        
+
         fun tagP(vararg pubkeys: String) = apply { tagFilters["p"] = pubkeys.toList() }
         fun tagE(vararg eventIds: String) = apply { tagFilters["e"] = eventIds.toList() }
         fun tagG(vararg geohashes: String) = apply { tagFilters["g"] = geohashes.toList() }
         fun tag(name: String, vararg values: String) = apply { tagFilters[name] = values.toList() }
-        
+
         fun build(): NostrFilter {
             return NostrFilter(
                 ids = ids,
@@ -162,7 +157,7 @@ data class NostrFilter(
             )
         }
     }
-    
+
     /**
      * Check if this filter matches an event
      */
@@ -171,26 +166,26 @@ data class NostrFilter(
         if (ids != null && !ids.contains(event.id)) {
             return false
         }
-        
+
         // Check authors
         if (authors != null && !authors.contains(event.pubkey)) {
             return false
         }
-        
+
         // Check kinds
         if (kinds != null && !kinds.contains(event.kind)) {
             return false
         }
-        
+
         // Check time bounds
         if (since != null && event.createdAt < since) {
             return false
         }
-        
+
         if (until != null && event.createdAt > until) {
             return false
         }
-        
+
         // Check tag filters
         if (tagFilters != null) {
             for ((tagName, requiredValues) in tagFilters) {
@@ -198,26 +193,26 @@ data class NostrFilter(
                 val eventValues = eventTags.mapNotNull { tag ->
                     if (tag.size > 1) tag[1] else null
                 }
-                
+
                 val hasMatch = requiredValues.any { requiredValue ->
                     eventValues.contains(requiredValue)
                 }
-                
+
                 if (!hasMatch) {
                     return false
                 }
             }
         }
-        
+
         return true
     }
-    
+
     /**
      * Get debug description
      */
     fun getDebugDescription(): String {
         val parts = mutableListOf<String>()
-        
+
         ids?.let { parts.add("ids=${it.size}") }
         authors?.let { parts.add("authors=${it.size}") }
         kinds?.let { parts.add("kinds=$it") }
@@ -229,10 +224,10 @@ data class NostrFilter(
                 parts.add("#$tag=${values.size}")
             }
         }
-        
+
         return "NostrFilter(${parts.joinToString(", ")})"
     }
-    
+
     /**
      * Get geohash value from g tag filter (if present)
      * Returns the first geohash in the filter or null if none

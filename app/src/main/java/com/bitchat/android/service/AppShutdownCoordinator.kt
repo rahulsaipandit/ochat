@@ -1,5 +1,7 @@
 package com.bitchat.android.service
 
+import com.bitchat.android.nostr.NostrRelayManager
+import com.bitchat.android.nostr.shared
 import android.app.Application
 import android.os.Process
 import androidx.core.app.NotificationManagerCompat
@@ -56,7 +58,7 @@ object AppShutdownCoordinator {
 
             // Stop mesh (best-effort)
             try { mesh?.stopServices() } catch (_: Exception) { }
-            try { com.bitchat.android.nostr.NostrRelayManager.shared.disconnect() } catch (_: Exception) { }
+            try { NostrRelayManager.shared.disconnect() } catch (_: Exception) { }
             try { com.bitchat.android.mesh.PowerManager.getInstance(app).shutdown() } catch (_: Exception) { }
 
             // Stop Tor temporarily (do not change user setting)

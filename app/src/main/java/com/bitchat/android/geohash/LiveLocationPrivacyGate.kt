@@ -1,5 +1,6 @@
 package com.bitchat.android.geohash
 
+import com.bitchat.android.nostr.LiveLocationGate
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -79,7 +80,7 @@ internal class LiveLocationAccessPolicy(
 
 internal const val DEFAULT_LIVE_LOCATION_ENABLED = false
 
-internal object LiveLocationPrivacyGate {
+internal object LiveLocationPrivacyGate : LiveLocationGate {
     private val policy = LiveLocationAccessPolicy()
     private val revocationListeners = CopyOnWriteArraySet<() -> Unit>()
 
@@ -99,11 +100,11 @@ internal object LiveLocationPrivacyGate {
 
     fun captureToken(): Long? = policy.captureToken()
     fun resumeAccess() = policy.resumeAccess()
-    fun accepts(token: Long): Boolean = policy.accepts(token)
-    fun runIfAllowed(token: Long, action: () -> Unit): Boolean =
+    override fun accepts(token: Long): Boolean = policy.accepts(token)
+    override fun runIfAllowed(token: Long, action: () -> Unit): Boolean =
         policy.runIfAllowed(token, action)
 
-    fun addRevocationListener(listener: () -> Unit) {
+    override fun addRevocationListener(listener: () -> Unit) {
         revocationListeners.add(listener)
     }
 

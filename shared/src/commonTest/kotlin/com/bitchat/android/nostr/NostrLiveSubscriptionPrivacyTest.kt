@@ -1,11 +1,11 @@
 package com.bitchat.android.nostr
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.Test
 
 class NostrLiveSubscriptionPrivacyTest {
     @Test
-    fun `teardown closes live subscriptions on shared relays`() {
+    fun teardownClosesLiveSubscriptionsOnSharedRelays() {
         val targets = NostrLiveSubscriptionPrivacy.closeTargets(
             liveSubscriptionIds = setOf("live-a", "live-b"),
             subscriptionsByRelay = mapOf(
@@ -25,7 +25,7 @@ class NostrLiveSubscriptionPrivacyTest {
     }
 
     @Test
-    fun `teardown ignores relays without live subscriptions`() {
+    fun teardownIgnoresRelaysWithoutLiveSubscriptions() {
         assertEquals(
             emptyMap<String, Set<String>>(),
             NostrLiveSubscriptionPrivacy.closeTargets(

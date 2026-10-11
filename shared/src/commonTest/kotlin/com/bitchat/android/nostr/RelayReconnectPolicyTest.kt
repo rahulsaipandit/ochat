@@ -1,9 +1,9 @@
 package com.bitchat.android.nostr
 
 import com.bitchat.android.util.AppConstants
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 /**
  * The relay layer has no connectivity callback, its periodic validator only
@@ -18,12 +18,12 @@ class RelayReconnectPolicyTest {
     private val ceiling = AppConstants.Nostr.MAX_BACKOFF_INTERVAL_MS
 
     @Test
-    fun `the first retry waits the initial interval`() {
+    fun theFirstRetryWaitsTheInitialInterval() {
         assertEquals(initial, RelayReconnectPolicy.backoffMs(RelayReconnectPolicy.nextAttempt(0)))
     }
 
     @Test
-    fun `the interval doubles per attempt until it reaches the ceiling`() {
+    fun theIntervalDoublesPerAttemptUntilItReachesTheCeiling() {
         var attempt = 0
         var previous = 0L
         var sawCeiling = false
@@ -32,20 +32,20 @@ class RelayReconnectPolicyTest {
             attempt = RelayReconnectPolicy.nextAttempt(attempt)
             val delay = RelayReconnectPolicy.backoffMs(attempt)
 
-            assertTrue("delay must never exceed the ceiling", delay <= ceiling)
+            assertTrue(delay <= ceiling, "delay must never exceed the ceiling")
             if (delay == ceiling) {
                 sawCeiling = true
             } else {
-                assertEquals("expected doubling below the ceiling", maxOf(initial, previous * 2), delay)
+                assertEquals(maxOf(initial, previous * 2), delay, "expected doubling below the ceiling")
             }
             previous = delay
         }
 
-        assertTrue("the schedule must actually reach the ceiling", sawCeiling)
+        assertTrue(sawCeiling, "the schedule must actually reach the ceiling")
     }
 
     @Test
-    fun `an outage longer than the schedule keeps retrying at the ceiling`() {
+    fun anOutageLongerThanTheScheduleKeepsRetryingAtTheCeiling() {
         var attempt = 0
         // Far past the old give-up point; a real outage can last hours.
         repeat(500) { attempt = RelayReconnectPolicy.nextAttempt(attempt) }
@@ -55,16 +55,16 @@ class RelayReconnectPolicyTest {
     }
 
     @Test
-    fun `a long outage cannot run the attempt counter or the exponent away`() {
+    fun aLongOutageCannotRunTheAttemptCounterOrTheExponentAway() {
         var attempt = 0
         repeat(10_000) { attempt = RelayReconnectPolicy.nextAttempt(attempt) }
 
         val delay = RelayReconnectPolicy.backoffMs(attempt)
-        assertTrue("delay must stay finite and bounded", delay in 1..ceiling)
+        assertTrue(delay in 1..ceiling, "delay must stay finite and bounded")
     }
 
     @Test
-    fun `a successful connection resets the schedule to the initial interval`() {
+    fun aSuccessfulConnectionResetsTheScheduleToTheInitialInterval() {
         var attempt = 0
         repeat(6) { attempt = RelayReconnectPolicy.nextAttempt(attempt) }
         assertTrue(RelayReconnectPolicy.backoffMs(attempt) > initial)
@@ -76,14 +76,14 @@ class RelayReconnectPolicyTest {
     }
 
     @Test
-    fun `a nonsensical stored attempt count still yields a usable delay`() {
+    fun aNonsensicalStoredAttemptCountStillYieldsAUsableDelay() {
         assertEquals(initial, RelayReconnectPolicy.backoffMs(RelayReconnectPolicy.nextAttempt(-5)))
         assertTrue(RelayReconnectPolicy.backoffMs(0) in 1..ceiling)
         assertTrue(RelayReconnectPolicy.backoffMs(Int.MAX_VALUE) in 1..ceiling)
     }
 
     @Test
-    fun `the whole schedule stays under an hour of total wait before the ceiling`() {
+    fun theWholeScheduleStaysUnderAnHourOfTotalWaitBeforeTheCeiling() {
         var attempt = 0
         var total = 0L
         repeat(RelayReconnectPolicy.SATURATION_ATTEMPTS) {
@@ -91,6 +91,6 @@ class RelayReconnectPolicyTest {
             total += RelayReconnectPolicy.backoffMs(attempt)
         }
 
-        assertTrue("reaching the steady state must not take an hour", total < 60 * 60 * 1000L)
+        assertTrue(total < 60 * 60 * 1000L, "reaching the steady state must not take an hour")
     }
 }
