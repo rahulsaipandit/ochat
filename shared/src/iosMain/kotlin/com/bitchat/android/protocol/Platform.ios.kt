@@ -12,6 +12,9 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import platform.Foundation.NSCondition
 import platform.Foundation.NSDate
 import platform.Foundation.NSLog
@@ -168,3 +171,7 @@ actual class ConcurrentMap<K : Any, V : Any> actual constructor() : AbstractMuta
     override val entries: MutableSet<MutableMap.MutableEntry<K, V>>
         get() = lock.withLock { LinkedHashMap(delegate).entries }
 }
+
+actual val IoDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+actual fun <T> runBlockingCompat(block: suspend () -> T): T = kotlinx.coroutines.runBlocking { block() }

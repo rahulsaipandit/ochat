@@ -1,3 +1,5 @@
+@file:OptIn(com.bitchat.android.protocol.InternalTestApi::class)
+
 package com.bitchat.android.mesh
 
 import android.os.Build
@@ -55,7 +57,7 @@ class MessageHandlerTest {
     @Before
     fun setup() {
         MeshGraphService.resetForTesting()
-        handler = MessageHandler(myPeerID, RuntimeEnvironment.getApplication())
+        handler = MessageHandler(myPeerID, AndroidMessageHandlerPlatform(RuntimeEnvironment.getApplication()))
         delegate = mock()
         handler.delegate = delegate
 

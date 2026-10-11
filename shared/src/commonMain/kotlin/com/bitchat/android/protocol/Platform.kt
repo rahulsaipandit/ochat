@@ -1,5 +1,6 @@
 package com.bitchat.android.protocol
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlin.time.Clock
 
 /** Minimal logging seam: android.util.Log on Android, NSLog on iOS. */
@@ -51,3 +52,9 @@ expect class ConcurrentMap<K : Any, V : Any>() : MutableMap<K, V> {
 }
 
 fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
+
+/** Dispatcher for blocking or IO-bound work (Dispatchers.IO on every target). */
+expect val IoDispatcher: CoroutineDispatcher
+
+/** Blocks the calling thread until [block] completes (runBlocking is not available in common code). */
+expect fun <T> runBlockingCompat(block: suspend () -> T): T

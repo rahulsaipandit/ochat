@@ -239,7 +239,7 @@ class BluetoothGattServerManager(
                     return
                 }
 
-                if (characteristic.uuid == AppConstants.Mesh.Gatt.CHARACTERISTIC_UUID) {
+                if (characteristic.uuid == GattConstants.CHARACTERISTIC_UUID) {
                     val linkID = serverLinkIDs[device.address]
                     if (linkID == null) {
                         Log.d(TAG, "Server: Dropping packet from stale connection ${device.address}")
@@ -328,7 +328,7 @@ class BluetoothGattServerManager(
         
         // Create characteristic with notification support
         characteristic = BluetoothGattCharacteristic(
-            AppConstants.Mesh.Gatt.CHARACTERISTIC_UUID,
+            GattConstants.CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_READ or 
             BluetoothGattCharacteristic.PROPERTY_WRITE or 
             BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
@@ -338,12 +338,12 @@ class BluetoothGattServerManager(
         )
         
         val descriptor = BluetoothGattDescriptor(
-            AppConstants.Mesh.Gatt.DESCRIPTOR_UUID,
+            GattConstants.DESCRIPTOR_UUID,
             BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
         )
         characteristic?.addDescriptor(descriptor)
         
-        val service = BluetoothGattService(AppConstants.Mesh.Gatt.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val service = BluetoothGattService(GattConstants.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
         service.addCharacteristic(characteristic)
         
         gattServer?.addService(service)
@@ -387,7 +387,7 @@ class BluetoothGattServerManager(
         val settings = powerManager.getAdvertiseSettings()
         
         val data = AdvertiseData.Builder()
-            .addServiceUuid(ParcelUuid(AppConstants.Mesh.Gatt.SERVICE_UUID))
+            .addServiceUuid(ParcelUuid(GattConstants.SERVICE_UUID))
             .setIncludeTxPowerLevel(false)
             .setIncludeDeviceName(false)
             .build()
@@ -401,7 +401,7 @@ class BluetoothGattServerManager(
         }
         
         val scanResponse = AdvertiseData.Builder()
-            .addServiceData(ParcelUuid(AppConstants.Mesh.Gatt.SERVICE_UUID), peerIDBytes)
+            .addServiceData(ParcelUuid(GattConstants.SERVICE_UUID), peerIDBytes)
             .setIncludeTxPowerLevel(false)
             .setIncludeDeviceName(false)
             .build()

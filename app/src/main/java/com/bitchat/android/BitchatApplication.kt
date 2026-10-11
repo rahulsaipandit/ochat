@@ -13,6 +13,11 @@ class BitchatApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Let the shared mesh core consult the debug settings without depending on UI classes.
+        com.bitchat.android.mesh.MeshDebug.provider = {
+            com.bitchat.android.ui.debug.DebugSettingsManager.getInstance().asMeshHooks()
+        }
+
         // Start the single process-wide power policy before transport components are constructed.
         com.bitchat.android.mesh.PowerManager.getInstance(this).start()
 

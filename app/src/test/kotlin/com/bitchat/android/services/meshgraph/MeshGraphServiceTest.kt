@@ -1,3 +1,5 @@
+@file:OptIn(com.bitchat.android.protocol.InternalTestApi::class)
+
 package com.bitchat.android.services.meshgraph
 
 import org.junit.Assert.*

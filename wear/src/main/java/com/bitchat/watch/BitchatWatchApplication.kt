@@ -8,6 +8,9 @@ import com.bitchat.watch.ui.WearPeerIdentityState
 class BitchatWatchApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        com.bitchat.android.mesh.MeshDebug.provider = {
+            com.bitchat.android.ui.debug.DebugSettingsManager.getInstance().asMeshHooks()
+        }
         PowerManager.getInstance(applicationContext)
         WearNotificationCoordinator.getInstance(applicationContext)
         WearPeerIdentityState.initialize(applicationContext)

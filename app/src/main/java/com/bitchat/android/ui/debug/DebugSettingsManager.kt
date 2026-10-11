@@ -27,6 +27,18 @@ class DebugSettingsManager private constructor() {
         }
     }
     
+    /** Adapter handed to the shared mesh core (see MeshDebug). */
+    fun asMeshHooks(): com.bitchat.android.mesh.MeshDebugHooks = object : com.bitchat.android.mesh.MeshDebugHooks {
+        override fun isPacketRelayEnabled(): Boolean = packetRelayEnabled.value
+
+        override fun logIncomingPacket(
+            senderPeerID: String,
+            senderNickname: String?,
+            messageType: String,
+            viaDeviceId: String?
+        ) = this@DebugSettingsManager.logIncomingPacket(senderPeerID, senderNickname, messageType, viaDeviceId)
+    }
+
     // Debug settings state
     private val _verboseLoggingEnabled = MutableStateFlow(false)
     val verboseLoggingEnabled: StateFlow<Boolean> = _verboseLoggingEnabled.asStateFlow()

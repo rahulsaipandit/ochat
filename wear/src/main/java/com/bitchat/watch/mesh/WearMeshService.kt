@@ -1,5 +1,6 @@
 package com.bitchat.watch.mesh
 
+import com.bitchat.android.mesh.AndroidMeshCorePlatform
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
@@ -65,7 +66,6 @@ class WearMeshService private constructor(private val context: Context) {
 
     init {
         meshCore = MeshCore(
-            context = context.applicationContext,
             scope = serviceScope,
             transport = bleTransport,
             encryptionService = encryptionService,
@@ -77,6 +77,7 @@ class WearMeshService private constructor(private val context: Context) {
                 override fun gcsMaxBytes(): Int = 400
                 override fun gcsTargetFpr(): Double = 0.01
             },
+            platform = AndroidMeshCorePlatform(context),
             hooks = MeshCore.Hooks(
                 onMessageReceived = { message -> handleMessageReceived(message) },
                 onAnnounceProcessed = { routed, _ ->

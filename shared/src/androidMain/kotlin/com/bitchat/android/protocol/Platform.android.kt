@@ -86,3 +86,7 @@ actual class PlatformLock actual constructor() {
 }
 
 actual typealias ConcurrentMap<K, V> = java.util.concurrent.ConcurrentHashMap<K, V>
+
+actual val IoDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
+
+actual fun <T> runBlockingCompat(block: suspend () -> T): T = kotlinx.coroutines.runBlocking { block() }

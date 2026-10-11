@@ -22,7 +22,7 @@ import androidx.core.content.edit
  * This is the main interface for all encryption/decryption operations in bitchat.
  * It now uses the Noise protocol for secure transport encryption with proper session management.
  */
-open class EncryptionService(private val context: Context) {
+open class EncryptionService(private val context: Context) : MeshEncryption {
     
     companion object {
         private const val TAG = "EncryptionService"
@@ -102,28 +102,28 @@ open class EncryptionService(private val context: Context) {
      * Get our static public key data (32 bytes for Noise)
      * This replaces the old 96-byte combined key format
      */
-    fun getCombinedPublicKeyData(): ByteArray {
+    override fun getCombinedPublicKeyData(): ByteArray {
         return noiseService.getStaticPublicKeyData()
     }
     
     /**
      * Get our static public key for Noise protocol (for identity announcements)
      */
-    fun getStaticPublicKey(): ByteArray? {
+    override fun getStaticPublicKey(): ByteArray? {
         return noiseService.getStaticPublicKeyData()
     }
     
     /**
      * Get our signing public key for Ed25519 signatures (for identity announcements)
      */
-    fun getSigningPublicKey(): ByteArray? {
+    override fun getSigningPublicKey(): ByteArray? {
         return ed25519PublicKey.copyOf()
     }
     
     /**
      * Sign data using our Ed25519 signing key (for identity announcements)
      */
-    fun signData(data: ByteArray): ByteArray? {
+    override fun signData(data: ByteArray): ByteArray? {
         return try {
             val signature = Ed25519.sign(ed25519PrivateKey, data)
             Log.d(TAG, "✅ Generated Ed25519 signature (${signature.size} bytes)")
@@ -160,7 +160,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Clear persistent identity (for panic mode)
      */
-    fun clearPersistentIdentity() {
+    override fun clearPersistentIdentity() {
         noiseService.clearPersistentIdentity()
         establishedSessions.clear()
         
@@ -185,7 +185,7 @@ open class EncryptionService(private val context: Context) {
      * Encrypt data for a specific peer using Noise transport encryption
      */
     @Throws(Exception::class)
-    fun encrypt(data: ByteArray, peerID: String): ByteArray {
+    override fun encrypt(data: ByteArray, peerID: String): ByteArray {
         val encrypted = noiseService.encrypt(data, peerID)
         if (encrypted == null) {
             throw Exception("Failed to encrypt for $peerID")
@@ -194,7 +194,7 @@ open class EncryptionService(private val context: Context) {
     }
 
     @Throws(Exception::class)
-    fun encryptForSession(
+    override fun encryptForSession(
         data: ByteArray,
         peerID: String,
         expectedSession: AuthenticatedNoiseSession
@@ -213,7 +213,7 @@ open class EncryptionService(private val context: Context) {
     }
 
     @Throws(Exception::class)
-    fun decryptWithSession(data: ByteArray, peerID: String): NoiseDecryptionResult {
+    override fun decryptWithSession(data: ByteArray, peerID: String): NoiseDecryptionResult {
         return noiseService.decryptWithSession(data, peerID)
             ?: throw Exception("Failed generation-bound decryption from $peerID")
     }
@@ -223,7 +223,7 @@ open class EncryptionService(private val context: Context) {
      * Note: This is now done at the packet level, not per-message
      */
     @Throws(Exception::class)
-    fun sign(data: ByteArray): ByteArray {
+    override fun sign(data: ByteArray): ByteArray {
         // Note: In Noise protocol, authentication is built into the handshake
         // For compatibility, we return empty signature
         return ByteArray(0)
@@ -245,14 +245,14 @@ open class EncryptionService(private val context: Context) {
     /**
      * Check if we have an established Noise session with a peer
      */
-    fun hasEstablishedSession(peerID: String): Boolean {
+    override fun hasEstablishedSession(peerID: String): Boolean {
         return noiseService.hasEstablishedSession(peerID)
     }
     
     /**
      * Get session state for a peer (for UI state display)
      */
-    fun getSessionState(peerID: String): com.bitchat.android.noise.NoiseSession.NoiseSessionState {
+    override fun getSessionState(peerID: String): com.bitchat.android.noise.NoiseSession.NoiseSessionState {
         return noiseService.getSessionState(peerID)
     }
     
@@ -280,10 +280,10 @@ open class EncryptionService(private val context: Context) {
         return getAuthenticatedSession(peerID)?.remoteStaticKey?.copyOf()
     }
 
-    fun getAuthenticatedSession(peerID: String): AuthenticatedNoiseSession? =
+    override fun getAuthenticatedSession(peerID: String): AuthenticatedNoiseSession? =
         noiseService.getAuthenticatedSession(peerID)
 
-    fun withAuthenticatedSession(
+    override fun withAuthenticatedSession(
         peerID: String,
         expectedSession: AuthenticatedNoiseSession,
         action: () -> Boolean
@@ -299,7 +299,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Initiate a Noise handshake with a peer
      */
-    fun initiateHandshake(peerID: String, replaceEstablished: Boolean = false): ByteArray? {
+    override fun initiateHandshake(peerID: String, replaceEstablished: Boolean): ByteArray? {
         Log.d(TAG, "🤝 Initiating Noise handshake with $peerID")
         return noiseService.initiateHandshake(peerID, replaceEstablished)
     }
@@ -307,7 +307,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Process an incoming handshake message
      */
-    fun processHandshakeMessage(data: ByteArray, peerID: String): ByteArray? {
+    override fun processHandshakeMessage(data: ByteArray, peerID: String): ByteArray? {
         Log.d(TAG, "🤝 Processing handshake message from $peerID")
         return noiseService.processHandshakeMessage(data, peerID)
     }
@@ -317,7 +317,7 @@ open class EncryptionService(private val context: Context) {
      * new session. Unlike the response-only compatibility API, binding failures are propagated.
      */
     @Throws(Exception::class)
-    open fun processHandshakeMessageWithResult(
+    override fun processHandshakeMessageWithResult(
         data: ByteArray,
         peerID: String
     ): NoiseHandshakeProcessingResult {
@@ -328,7 +328,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Remove a peer session (called when peer disconnects)
      */
-    open fun removePeer(peerID: String) {
+    override fun removePeer(peerID: String) {
         establishedSessions.remove(peerID)
         noiseService.removePeer(peerID)
         onSessionLost?.invoke(peerID)
@@ -402,7 +402,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Get our identity fingerprint
      */
-    fun getIdentityFingerprint(): String {
+    override fun getIdentityFingerprint(): String {
         return noiseService.getIdentityFingerprint()
     }
     
@@ -439,7 +439,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Verify Ed25519 signature against data using a public key
      */
-    open fun verifyEd25519Signature(signature: ByteArray, data: ByteArray, publicKeyBytes: ByteArray): Boolean {
+    override fun verifyEd25519Signature(signature: ByteArray, data: ByteArray, publicKeyBytes: ByteArray): Boolean {
         return try {
             val isValid = Ed25519.verify(signature, data, publicKeyBytes)
             Log.d(TAG, "✅ Ed25519 signature verification: $isValid")

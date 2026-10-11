@@ -1,5 +1,6 @@
 package com.bitchat.android.wifiaware
 
+import com.bitchat.android.mesh.AndroidMeshCorePlatform
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -152,7 +153,6 @@ class WifiAwareMeshService(private val context: Context) : MeshService, Transpor
             } catch (_: Exception) { }
         }
         meshCore = MeshCore(
-            context = context.applicationContext,
             scope = serviceScope,
             transport = wifiTransport,
             encryptionService = encryptionService,
@@ -164,6 +164,7 @@ class WifiAwareMeshService(private val context: Context) : MeshService, Transpor
                 override fun gcsMaxBytes(): Int = 400
                 override fun gcsTargetFpr(): Double = 0.01
             },
+            platform = AndroidMeshCorePlatform(context),
             hooks = MeshCore.Hooks(
                 onMessageReceived = { message -> handleMessageReceived(message) },
                 onAnnounceProcessed = { routed, _ ->

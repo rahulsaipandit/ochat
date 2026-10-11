@@ -209,7 +209,7 @@ class BluetoothGattClientManager(
         }
         
         val scanFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(AppConstants.Mesh.Gatt.SERVICE_UUID))
+            .setServiceUuid(ParcelUuid(GattConstants.SERVICE_UUID))
             .build()
         
         val scanFilters = listOf(scanFilter)
@@ -375,7 +375,7 @@ class BluetoothGattClientManager(
         val scanRecord = result.scanRecord
         
         // CRITICAL: Only process devices that have our service UUID
-        val hasOurService = scanRecord?.serviceUuids?.any { it.uuid == AppConstants.Mesh.Gatt.SERVICE_UUID } == true
+        val hasOurService = scanRecord?.serviceUuids?.any { it.uuid == GattConstants.SERVICE_UUID } == true
         if (!hasOurService) {
             return
         }
@@ -385,7 +385,7 @@ class BluetoothGattClientManager(
         scanRetryCount = 0
 
         // Try to extract peerID from Service Data (if available) for stable identity
-        val serviceData = scanRecord?.getServiceData(ParcelUuid(AppConstants.Mesh.Gatt.SERVICE_UUID))
+        val serviceData = scanRecord?.getServiceData(ParcelUuid(GattConstants.SERVICE_UUID))
         val peerID = if (serviceData != null && serviceData.size >= 8) {
             serviceData.joinToString("") { "%02x".format(it) }
         } else {
@@ -524,9 +524,9 @@ class BluetoothGattClientManager(
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {                
                 if (status == BluetoothGatt.GATT_SUCCESS) {
-                    val service = gatt.getService(AppConstants.Mesh.Gatt.SERVICE_UUID)
+                    val service = gatt.getService(GattConstants.SERVICE_UUID)
                     if (service != null) {
-                        val characteristic = service.getCharacteristic(AppConstants.Mesh.Gatt.CHARACTERISTIC_UUID)
+                        val characteristic = service.getCharacteristic(GattConstants.CHARACTERISTIC_UUID)
                         if (characteristic != null) {
                             if (connectionTracker.updateDeviceConnectionIfCurrent(
                                     deviceAddress,
@@ -537,7 +537,7 @@ class BluetoothGattClientManager(
                             }
                             
                             gatt.setCharacteristicNotification(characteristic, true)
-                            val descriptor = characteristic.getDescriptor(AppConstants.Mesh.Gatt.DESCRIPTOR_UUID)
+                            val descriptor = characteristic.getDescriptor(GattConstants.DESCRIPTOR_UUID)
                             if (descriptor != null) {
                                 descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                                 gatt.writeDescriptor(descriptor)
@@ -581,7 +581,7 @@ class BluetoothGattClientManager(
                 characteristic: BluetoothGattCharacteristic,
                 status: Int
             ) {
-                if (characteristic.uuid == AppConstants.Mesh.Gatt.CHARACTERISTIC_UUID) {
+                if (characteristic.uuid == GattConstants.CHARACTERISTIC_UUID) {
                     delegate?.onGattClientWriteComplete(gatt.device.address, linkID, status)
                 }
             }

@@ -24,8 +24,6 @@ import java.util.Date
 import java.util.TreeMap
 import java.util.UUID
 
-enum class LiveVoiceScope { DIRECT_MESSAGE, PUBLIC_MESH }
-
 sealed interface LiveVoiceEvent {
     val peerID: String
     val burstID: String
