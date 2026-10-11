@@ -193,6 +193,8 @@ dependencies {
     
     // Testing
     testImplementation(libs.bundles.testing)
+    // The Android JNI artifact cannot load on the host JVM; unit tests use the JVM build.
+    testImplementation(libs.secp256k1.kmp.jni.jvm)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.bundles.compose.testing)
     debugImplementation(libs.androidx.compose.ui.tooling)

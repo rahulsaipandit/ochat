@@ -76,6 +76,13 @@ object DefaultNoiseCrypto : NoiseCrypto {
             throw NoiseException("Authentication failed", e)
         }
 
+    /** ChaCha20-Poly1305 with a caller-supplied 12-byte nonce (used by XChaCha20 for Nostr). */
+    internal fun sealWithNonce(key: ByteArray, nonce12: ByteArray, ad: ByteArray, plaintext: ByteArray): ByteArray =
+        cipher(key).encryptWithIvBlocking(nonce12, plaintext, ad)
+
+    internal fun openWithNonce(key: ByteArray, nonce12: ByteArray, ad: ByteArray, ciphertext: ByteArray): ByteArray =
+        cipher(key).decryptWithIvBlocking(nonce12, ciphertext, ad)
+
     private fun cipher(key: ByteArray) = provider.get(ChaCha20Poly1305).keyDecoder()
         .decodeFromByteArrayBlocking(ChaCha20Poly1305.Key.Format.RAW, key).cipher()
 

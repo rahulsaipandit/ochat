@@ -50,6 +50,8 @@ The authoritative pins are:
 - `gradle/wrapper/gradle-wrapper.properties`
 - `gradle/libs.versions.toml`
 - `settings-gradle.lockfile`
+- `shared/gradle.lockfile`
+- `shared-ui/gradle.lockfile`
 - `app/gradle.lockfile`
 - `wear/gradle.lockfile`
 - `gradle/verification-metadata.xml`

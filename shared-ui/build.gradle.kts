@@ -23,6 +23,7 @@ kotlin {
             implementation(project(":shared"))
             implementation(libs.cmp.runtime)
             implementation(libs.cmp.foundation)
+            implementation(libs.cmp.material3)
             implementation(libs.cmp.ui)
         }
         commonTest.dependencies {

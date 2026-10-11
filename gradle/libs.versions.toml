@@ -17,6 +17,8 @@ appcompat = "1.7.1"
 compose-bom = "2026.06.01"
 compose-icons-extended = "1.7.8"
 compose-multiplatform = "1.12.1"
+# Material3 for Compose Multiplatform ships only alpha builds; accepted until a stable release.
+compose-multiplatform-material3 = "1.12.0-alpha03"
 
 # Navigation
 navigation-compose = "2.9.8"
@@ -39,6 +41,7 @@ gson = "2.14.0"
 # Coroutines
 kotlinx-coroutines = "1.11.0"
 cryptography-kotlin = "0.6.0"
+secp256k1-kmp = "0.24.0"
 
 # Bluetooth
 nordic-ble = "2.11.0"
@@ -98,6 +101,7 @@ androidx-compose-material-icons-extended = { module = "androidx.compose.material
 # Compose Multiplatform (used by :shared-ui; versions follow the JetBrains plugin)
 cmp-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
 cmp-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
+cmp-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-multiplatform-material3" }
 cmp-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
 
 # Lifecycle
@@ -126,6 +130,9 @@ gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 cryptography-core = { module = "dev.whyoleg.cryptography:cryptography-core", version.ref = "cryptography-kotlin" }
 cryptography-provider-jdk = { module = "dev.whyoleg.cryptography:cryptography-provider-jdk", version.ref = "cryptography-kotlin" }
 cryptography-provider-optimal = { module = "dev.whyoleg.cryptography:cryptography-provider-optimal", version.ref = "cryptography-kotlin" }
+secp256k1-kmp = { module = "fr.acinq.secp256k1:secp256k1-kmp", version.ref = "secp256k1-kmp" }
+secp256k1-kmp-jni-android = { module = "fr.acinq.secp256k1:secp256k1-kmp-jni-android", version.ref = "secp256k1-kmp" }
+secp256k1-kmp-jni-jvm = { module = "fr.acinq.secp256k1:secp256k1-kmp-jni-jvm", version.ref = "secp256k1-kmp" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 
