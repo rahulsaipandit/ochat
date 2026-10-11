@@ -21,7 +21,7 @@ import androidx.core.content.edit
  * - Secure storage using Android EncryptedSharedPreferences
  * - Fingerprint calculation and identity validation
  */
-class SecureIdentityStateManager {
+class SecureIdentityStateManager : IdentityKeyStore {
     
     companion object {
         private const val TAG = "SecureIdentityStateManager"
@@ -84,7 +84,7 @@ class SecureIdentityStateManager {
      * Load saved static key pair
      * Returns (privateKey, publicKey) or null if none exists
      */
-    fun loadStaticKey(): Pair<ByteArray, ByteArray>? {
+    override fun loadStaticKey(): Pair<ByteArray, ByteArray>? {
         return try {
             val privateKeyString = prefs.getString(KEY_STATIC_PRIVATE_KEY, null)
             val publicKeyString = prefs.getString(KEY_STATIC_PUBLIC_KEY, null)
@@ -114,7 +114,7 @@ class SecureIdentityStateManager {
     /**
      * Save static key pair to secure storage
      */
-    fun saveStaticKey(privateKey: ByteArray, publicKey: ByteArray) {
+    override fun saveStaticKey(privateKey: ByteArray, publicKey: ByteArray) {
         try {
             // Validate key sizes
             if (privateKey.size != 32 || publicKey.size != 32) {
@@ -142,7 +142,7 @@ class SecureIdentityStateManager {
      * Load saved signing key pair
      * Returns (privateKey, publicKey) or null if none exists
      */
-    fun loadSigningKey(): Pair<ByteArray, ByteArray>? {
+    override fun loadSigningKey(): Pair<ByteArray, ByteArray>? {
         return try {
             val privateKeyString = prefs.getString(KEY_SIGNING_PRIVATE_KEY, null)
             val publicKeyString = prefs.getString(KEY_SIGNING_PUBLIC_KEY, null)
@@ -172,7 +172,7 @@ class SecureIdentityStateManager {
     /**
      * Save signing key pair to secure storage
      */
-    fun saveSigningKey(privateKey: ByteArray, publicKey: ByteArray) {
+    override fun saveSigningKey(privateKey: ByteArray, publicKey: ByteArray) {
         try {
             // Validate key sizes
             if (privateKey.size != 32 || publicKey.size != 32) {
@@ -466,7 +466,7 @@ class SecureIdentityStateManager {
      * Clear all identity data (for panic mode)
      */
     @SuppressLint("UseKtx")
-    fun clearIdentityData() {
+    override fun clearIdentityData() {
         try {
             synchronized(privateMediaPinsLock) {
                 privateMediaPinsEpoch += 1

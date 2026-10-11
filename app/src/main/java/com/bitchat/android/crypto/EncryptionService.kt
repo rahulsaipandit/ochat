@@ -6,17 +6,12 @@ import android.util.Base64
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.bitchat.android.favorites.FavoritesPersistenceService
+import com.bitchat.android.identity.SecureIdentityStateManager
 import com.bitchat.android.noise.NoiseEncryptionService
 import com.bitchat.android.noise.NoiseHandshakeProcessingResult
 import com.bitchat.android.noise.AuthenticatedNoiseSession
 import com.bitchat.android.noise.NoiseDecryptionResult
-import org.bouncycastle.crypto.AsymmetricCipherKeyPair
-import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
-import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
-import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
-import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
-import org.bouncycastle.crypto.signers.Ed25519Signer
-import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import androidx.core.content.edit
 
@@ -37,14 +32,19 @@ open class EncryptionService(private val context: Context) {
     }
     
     // Core Noise encryption service
-    private val noiseService: NoiseEncryptionService by lazy { NoiseEncryptionService(context) }
+    private val noiseService: NoiseEncryptionService by lazy { NoiseEncryptionService(SecureIdentityStateManager(context)) { peerID, remoteStaticKey ->
+            // Preserve the canonical peerID -> npub index once the Noise handshake authenticated the key.
+            FavoritesPersistenceService.shared.findNostrPubkey(remoteStaticKey)?.let { npub ->
+                FavoritesPersistenceService.shared.updateNostrPublicKeyForPeerID(peerID, npub)
+            }
+        } }
     
     // Session tracking for established connections
     private val establishedSessions = ConcurrentHashMap<String, String>() // peerID -> fingerprint
     
     // Ed25519 signing keys (separate from Noise static keys)
-    private lateinit var ed25519PrivateKey: Ed25519PrivateKeyParameters
-    private lateinit var ed25519PublicKey: Ed25519PublicKeyParameters
+    private lateinit var ed25519PrivateKey: ByteArray // 32-byte RFC 8032 seed
+    private lateinit var ed25519PublicKey: ByteArray
     
     // Callbacks for UI state updates
     var onSessionEstablished: ((String) -> Unit)? = null // peerID
@@ -78,8 +78,8 @@ open class EncryptionService(private val context: Context) {
         setUpEncryptedPrefs()
         // Initialize or load Ed25519 signing keys
         val keyPair = loadOrCreateEd25519KeyPair()
-        ed25519PrivateKey = keyPair.private as Ed25519PrivateKeyParameters
-        ed25519PublicKey = keyPair.public as Ed25519PublicKeyParameters
+        ed25519PrivateKey = keyPair.privateKey
+        ed25519PublicKey = keyPair.publicKey
         
         Log.d(TAG, "✅ Ed25519 signing keys initialized")
         
@@ -117,7 +117,7 @@ open class EncryptionService(private val context: Context) {
      * Get our signing public key for Ed25519 signatures (for identity announcements)
      */
     fun getSigningPublicKey(): ByteArray? {
-        return ed25519PublicKey.encoded
+        return ed25519PublicKey.copyOf()
     }
     
     /**
@@ -125,10 +125,7 @@ open class EncryptionService(private val context: Context) {
      */
     fun signData(data: ByteArray): ByteArray? {
         return try {
-            val signer = Ed25519Signer()
-            signer.init(true, ed25519PrivateKey)
-            signer.update(data, 0, data.size)
-            val signature = signer.generateSignature()
+            val signature = Ed25519.sign(ed25519PrivateKey, data)
             Log.d(TAG, "✅ Generated Ed25519 signature (${signature.size} bytes)")
             signature
         } catch (e: Exception) {
@@ -174,8 +171,10 @@ open class EncryptionService(private val context: Context) {
 
             // Generate new keys immediately
             val keyPair = loadOrCreateEd25519KeyPair()
-            ed25519PrivateKey = keyPair.private as Ed25519PrivateKeyParameters
-            ed25519PublicKey = keyPair.public as Ed25519PublicKeyParameters
+            val previousPrivateKey = ed25519PrivateKey
+            ed25519PrivateKey = keyPair.privateKey
+            ed25519PublicKey = keyPair.publicKey
+            previousPrivateKey.fill(0) // do not leave the pre-panic signing seed in memory
             Log.d(TAG, "✅ Rotated Ed25519 signing keys in memory")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to clear Ed25519 keys: ${e.message}")
@@ -442,11 +441,7 @@ open class EncryptionService(private val context: Context) {
      */
     open fun verifyEd25519Signature(signature: ByteArray, data: ByteArray, publicKeyBytes: ByteArray): Boolean {
         return try {
-            val publicKey = Ed25519PublicKeyParameters(publicKeyBytes, 0)
-            val verifier = Ed25519Signer()
-            verifier.init(false, publicKey)
-            verifier.update(data, 0, data.size)
-            val isValid = verifier.verifySignature(signature)
+            val isValid = Ed25519.verify(signature, data, publicKeyBytes)
             Log.d(TAG, "✅ Ed25519 signature verification: $isValid")
             isValid
         } catch (e: Exception) {
@@ -460,7 +455,7 @@ open class EncryptionService(private val context: Context) {
     /**
      * Load existing Ed25519 key pair from preferences or create a new one
      */
-    private fun loadOrCreateEd25519KeyPair(): AsymmetricCipherKeyPair {
+    private fun loadOrCreateEd25519KeyPair(): Ed25519KeyPair {
         // Migrate legacy plaintext Ed25519 key to encrypted storage if present
         migrateOldEd25519KeyIfNeeded()
         try {
@@ -469,10 +464,9 @@ open class EncryptionService(private val context: Context) {
             if (storedKey != null) {
                 // Load existing key
                 val privateKeyBytes = Base64.decode(storedKey, Base64.DEFAULT)
-                val privateKey = Ed25519PrivateKeyParameters(privateKeyBytes, 0)
-                val publicKey = privateKey.generatePublicKey()
+                val publicKey = Ed25519.publicKeyFromPrivate(privateKeyBytes)
                 Log.d(TAG, "✅ Loaded existing Ed25519 signing key pair")
-                return AsymmetricCipherKeyPair(publicKey, privateKey)
+                return Ed25519KeyPair(privateKeyBytes, publicKey)
             }
         } catch (e: Exception) {
             Log.w(TAG, "⚠️ Failed to load existing Ed25519 key, creating new one: ${e.message}")
@@ -482,16 +476,12 @@ open class EncryptionService(private val context: Context) {
         return generateAndSaveEd25519KeyPair()
     }
 
-    fun generateAndSaveEd25519KeyPair(): AsymmetricCipherKeyPair {
-        val keyGen = Ed25519KeyPairGenerator()
-        keyGen.init(Ed25519KeyGenerationParameters(SecureRandom()))
-        val keyPair = keyGen.generateKeyPair()
+    fun generateAndSaveEd25519KeyPair(): Ed25519KeyPair {
+        val keyPair = Ed25519.generateKeyPair()
 
         // Store private key in preferences
         try {
-            val privateKey = keyPair.private as Ed25519PrivateKeyParameters
-            val privateKeyBytes = privateKey.encoded
-            val encodedKey = Base64.encodeToString(privateKeyBytes, Base64.DEFAULT)
+            val encodedKey = Base64.encodeToString(keyPair.privateKey, Base64.DEFAULT)
 
             prefs.edit { putString(ED25519_PRIVATE_KEY_PREF, encodedKey) }
             Log.d(TAG, "✅ Created and stored new Ed25519 signing key pair")

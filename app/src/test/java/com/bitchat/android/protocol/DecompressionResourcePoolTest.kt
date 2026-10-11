@@ -1,3 +1,5 @@
+@file:OptIn(InternalTestApi::class)
+
 package com.bitchat.android.protocol
 
 import org.junit.Assert.assertEquals

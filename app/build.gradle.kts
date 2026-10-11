@@ -161,6 +161,7 @@ dependencies {
     implementation(libs.gson)
     
     // Coroutines
+    implementation(project(":shared"))
     implementation(libs.kotlinx.coroutines.android)
     
     // Bluetooth

@@ -200,6 +200,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
 
     // Coroutines
+    implementation(project(":shared"))
     implementation(libs.kotlinx.coroutines.android)
 
     // Cryptography (shared Noise/encryption stack)

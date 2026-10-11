@@ -8,7 +8,7 @@ import java.util.UUID
 object AppConstants {
     // Packet time-to-live (hops)
     val MESSAGE_TTL_HOPS: UByte = 7u     // Default TTL for regular packets
-    val SYNC_TTL_HOPS: UByte = 0u        // TTL for neighbor-only sync packets
+    val SYNC_TTL_HOPS: UByte = com.bitchat.android.protocol.ProtocolConstants.SYNC_TTL_HOPS        // TTL for neighbor-only sync packets
 
     object Mesh {
         // Peer lifecycle
@@ -54,11 +54,11 @@ object AppConstants {
     }
 
     object Noise {
-        const val REKEY_TIME_LIMIT_MS: Long = 3_600_000L // 1 hour
-        const val REKEY_MESSAGE_LIMIT_ENCRYPTION: Long = 1_000L // per session, encryption service policy
-        const val REKEY_MESSAGE_LIMIT_SESSION: Long = 10_000L // session-level ceiling
-        const val MAX_PAYLOAD_SIZE_BYTES: Int = 256
-        const val HIGH_NONCE_WARNING_THRESHOLD: Long = 1_000_000_000L
+        const val REKEY_TIME_LIMIT_MS: Long = com.bitchat.android.noise.NoiseConstants.REKEY_TIME_LIMIT_MS // 1 hour
+        const val REKEY_MESSAGE_LIMIT_ENCRYPTION: Long = com.bitchat.android.noise.NoiseConstants.REKEY_MESSAGE_LIMIT_ENCRYPTION // per session, encryption service policy
+        const val REKEY_MESSAGE_LIMIT_SESSION: Long = com.bitchat.android.noise.NoiseConstants.REKEY_MESSAGE_LIMIT_SESSION // session-level ceiling
+        const val MAX_PAYLOAD_SIZE_BYTES: Int = com.bitchat.android.noise.NoiseConstants.MAX_PAYLOAD_SIZE_BYTES 
+        const val HIGH_NONCE_WARNING_THRESHOLD: Long = com.bitchat.android.noise.NoiseConstants.HIGH_NONCE_WARNING_THRESHOLD 
     }
 
     object Verification {
@@ -66,8 +66,8 @@ object AppConstants {
     }
 
     object Protocol {
-        const val COMPRESSION_THRESHOLD_BYTES: Int = 100
-        const val MAX_PAYLOAD_LENGTH: Int = 10_485_760
+        const val COMPRESSION_THRESHOLD_BYTES: Int = com.bitchat.android.protocol.ProtocolConstants.COMPRESSION_THRESHOLD_BYTES
+        const val MAX_PAYLOAD_LENGTH: Int = com.bitchat.android.protocol.ProtocolConstants.MAX_PAYLOAD_LENGTH
     }
 
     object StoreForward {

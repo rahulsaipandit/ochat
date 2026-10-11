@@ -25,7 +25,7 @@ internal object IncomingMessageAdmission {
             }
 
             message.channel != null -> {
-                AppStateStore.addChannelMessage(message.channel, message)
+                AppStateStore.addChannelMessage(message.channel!!, message)
                 true
             }
 

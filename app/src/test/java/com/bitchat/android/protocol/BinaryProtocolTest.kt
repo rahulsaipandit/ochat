@@ -1,3 +1,5 @@
+@file:OptIn(InternalTestApi::class)
+
 package com.bitchat.android.protocol
 
 import com.bitchat.android.model.BitchatFilePacket
@@ -852,11 +854,11 @@ class BinaryProtocolTest {
         assertEquals("recipientID must be 8 bytes", 8, decoded.recipientID!!.size)
         for (i in 0 until 4) {
             assertEquals("recipientID byte $i must match",
-                shortRecipient[i], decoded.recipientID[i])
+                shortRecipient[i], decoded.recipientID!![i])
         }
         for (i in 4 until 8) {
             assertEquals("recipientID byte $i must be zero-padded",
-                0.toByte(), decoded.recipientID[i])
+                0.toByte(), decoded.recipientID!![i])
         }
     }
 

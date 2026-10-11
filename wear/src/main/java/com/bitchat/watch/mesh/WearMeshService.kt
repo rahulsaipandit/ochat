@@ -239,7 +239,7 @@ class WearMeshService private constructor(private val context: Context) {
                 true
             }
             message.channel != null -> {
-                AppStateStore.addChannelMessage(message.channel, message)
+                AppStateStore.addChannelMessage(message.channel!!, message)
                 true
             }
             else -> {
