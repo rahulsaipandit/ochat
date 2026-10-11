@@ -196,6 +196,8 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.bundles.compose.testing)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // Debug-only host for the shared Compose Multiplatform UI scaffold.
+    debugImplementation(project(":shared-ui"))
 }
 
 // Robolectric resolves Android runtime jars itself (outside Gradle dependency resolution).

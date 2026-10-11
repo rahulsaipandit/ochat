@@ -15,5 +15,12 @@
                 <action android:name="com.bitchat.droid.TEST_HOOK" />
             </intent-filter>
         </receiver>
+
+        <!-- Debug-only host for the shared Compose Multiplatform UI scaffold.
+             Start with `adb shell am start -n <package>/com.bitchat.android.ui.SharedUiPreviewActivity`. -->
+        <activity
+            android:name="com.bitchat.android.ui.SharedUiPreviewActivity"
+            android:exported="true"
+            tools:ignore="ExportedActivity" />
     </application>
 </manifest>
